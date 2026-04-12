@@ -1,0 +1,119 @@
+import type { BehavioralRules, ChatMode, ContextBlock, StyleFingerprint } from './types.js'
+
+export interface ModeConfigRow {
+  mode: string
+  system_injection: string
+  context_block_tag: string | null
+}
+
+export interface IdentityRow {
+  twin_name: string
+  persona_prompt: string
+  context_blocks: ContextBlock[] | unknown
+  behavioral_rules: BehavioralRules | unknown
+  style_fingerprint: StyleFingerprint | null
+}
+
+export interface LtmRow {
+  summary: string
+  category: string
+  weight: number
+  created_at: string
+}
+
+function asBlocks(raw: unknown): ContextBlock[] {
+  if (!Array.isArray(raw)) return []
+  return raw.filter((b) => b && typeof (b as ContextBlock).body === 'string') as ContextBlock[]
+}
+
+function serializeBehavioralRules(rules: unknown): string {
+  if (!rules || typeof rules !== 'object') return '(none)'
+  return JSON.stringify(rules as BehavioralRules, null, 2)
+}
+
+function filterContextBlocks(blocks: ContextBlock[], tag: string | null): ContextBlock[] {
+  if (!tag) return blocks
+  return blocks.filter((b) => {
+    const tags = b.tags
+    if (!tags || tags.length === 0) return true
+    return tags.includes(tag) || tags.includes('default')
+  })
+}
+
+function formatStyleFingerprintBlock(fp: StyleFingerprint | null): string {
+  if (!fp || Object.keys(fp).length === 0) {
+    return '(No style calibration data yet. Respond using persona and behavioral rules only.)'
+  }
+  const lines: string[] = ['## STYLE_FINGERPRINT (mirror — follow closely, do not quote this header)']
+  const entries = Object.entries(fp)
+  for (const [k, v] of entries) {
+    if (v === undefined || v === null) continue
+    if (Array.isArray(v)) {
+      lines.push(`- ${k}: ${v.join('; ')}`)
+    } else if (typeof v === 'object') {
+      lines.push(`- ${k}: ${JSON.stringify(v)}`)
+    } else {
+      lines.push(`- ${k}: ${String(v)}`)
+    }
+  }
+  return lines.join('\n')
+}
+
+function formatLtm(rows: LtmRow[]): string {
+  if (rows.length === 0) return '(No long-term memories yet.)'
+  return rows
+    .map((r, i) => `${i + 1}. [${r.category}] (weight ${r.weight}) ${r.summary}`)
+    .join('\n')
+}
+
+/**
+ * Assembles the single system prompt in the required order:
+ * 1. persona_prompt first
+ * 2. mode injection
+ * 3. behavioral_rules
+ * 4. context blocks (filtered)
+ * 5. top long-term memories
+ * 6. style fingerprint (separate block)
+ * 7. optional context_override (last among static blocks)
+ */
+export function buildSystemPrompt(args: {
+  identity: IdentityRow
+  mode: ChatMode
+  modeConfig: ModeConfigRow | null
+  longTermTop: LtmRow[]
+  contextOverride?: string
+}): string {
+  const { identity, modeConfig, longTermTop, contextOverride } = args
+  const blocks = asBlocks(identity.context_blocks)
+  const filtered = filterContextBlocks(blocks, modeConfig?.context_block_tag ?? null)
+
+  const parts: string[] = []
+
+  parts.push(identity.persona_prompt.trim())
+
+  const injection = modeConfig?.system_injection?.trim() ?? ''
+  if (injection) {
+    parts.push(`## MODE: ${args.mode}\n${injection}`)
+  }
+
+  parts.push(`## BEHAVIORAL_RULES\n${serializeBehavioralRules(identity.behavioral_rules)}`)
+
+  if (filtered.length > 0) {
+    const cb = filtered
+      .map((b) => `### ${b.title}\n${b.body}`)
+      .join('\n\n')
+    parts.push(`## CONTEXT_BLOCKS\n${cb}`)
+  } else {
+    parts.push('## CONTEXT_BLOCKS\n(none active for this mode filter)')
+  }
+
+  parts.push(`## LONG_TERM_MEMORY (top weighted)\n${formatLtm(longTermTop)}`)
+
+  parts.push(formatStyleFingerprintBlock(identity.style_fingerprint))
+
+  if (contextOverride?.trim()) {
+    parts.push(`## CONTEXT_OVERRIDE (user-requested)\n${contextOverride.trim()}`)
+  }
+
+  return parts.join('\n\n')
+}

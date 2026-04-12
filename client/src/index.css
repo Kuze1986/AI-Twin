@@ -1,0 +1,12 @@
+@import 'tailwindcss';
+
+@layer base {
+  html {
+    @apply antialiased text-zinc-800 bg-zinc-50;
+  }
+  @media (prefers-color-scheme: dark) {
+    html {
+      @apply text-zinc-100 bg-zinc-950;
+    }
+  }
+}
