@@ -15,6 +15,9 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 const app = express()
 
+// Railway (and other reverse proxies) terminate TLS; trust first hop for secure cookies / req.secure.
+app.set('trust proxy', 1)
+
 app.use(
   cors({
     origin: env.CORS_ORIGIN,
@@ -28,11 +31,14 @@ app.use(
     secret: env.SESSION_SECRET,
     resave: false,
     saveUninitialized: false,
+    name: 'ai_twin_admin_sid',
     cookie: {
+      path: '/',
       secure: env.NODE_ENV === 'production',
       httpOnly: true,
       maxAge: 7 * 24 * 60 * 60 * 1000,
-      sameSite: env.NODE_ENV === 'production' ? 'none' : 'lax',
+      // Same host serves SPA + /api; Lax avoids None+third-party quirks. Use None only if API is cross-site.
+      sameSite: 'lax',
     },
   }),
 )

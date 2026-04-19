@@ -37,8 +37,20 @@ adminRouter.post('/login', (req, res) => {
     res.status(401).json({ error: { code: 'invalid', message: 'Invalid password' } })
     return
   }
-  req.session!.admin = true
-  res.json({ ok: true })
+  req.session.regenerate((regenErr) => {
+    if (regenErr) {
+      res.status(500).json({ error: { code: 'session', message: regenErr.message } })
+      return
+    }
+    req.session.admin = true
+    req.session.save((saveErr) => {
+      if (saveErr) {
+        res.status(500).json({ error: { code: 'session', message: saveErr.message } })
+        return
+      }
+      res.json({ ok: true })
+    })
+  })
 })
 
 adminRouter.post('/logout', (req, res) => {
