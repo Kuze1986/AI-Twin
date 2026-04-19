@@ -15,7 +15,7 @@ export function AdminLayout() {
   const [ok, setOk] = useState<boolean | null>(null)
 
   useEffect(() => {
-    adminFetch('/identity')
+    adminFetch('/session')
       .then(() => setOk(true))
       .catch(() => setOk(false))
   }, [])

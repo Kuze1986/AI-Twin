@@ -12,6 +12,15 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 *
 
 export const adminRouter = Router()
 
+/** Session check only (no DB). AdminLayout must not use /identity for auth — that 404s when identity is missing. */
+adminRouter.get('/session', (req, res) => {
+  if (req.session?.admin === true) {
+    res.json({ ok: true as const })
+    return
+  }
+  res.status(401).json({ error: { code: 'admin_required', message: 'Admin login required' } })
+})
+
 adminRouter.post('/login', (req, res) => {
   const parsed = z.object({ password: z.string().min(1) }).safeParse(req.body)
   if (!parsed.success) {
