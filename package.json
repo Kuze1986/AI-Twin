@@ -2,9 +2,6 @@
   "name": "ai-twin",
   "private": true,
   "version": "1.0.0",
-  "engines": {
-    "node": "22"
-  },
   "workspaces": [
     "client",
     "server"
