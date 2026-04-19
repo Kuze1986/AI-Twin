@@ -1,3 +1,4 @@
-# Nixpacks' nodejs_22 is 22.11.x; Vite 8 needs ^20.19 || >=22.12. Node 23 satisfies that.
+# Nixpacks v1.38 only supports Node majors 16/18/20/22/24 (not 23 — unknown → nodejs_18).
+# nodejs_22 is 22.11.x, below Vite 8's >=22.12. Use 24 for a new-enough runtime.
 [variables]
-NIXPACKS_NODE_VERSION = "23"
+NIXPACKS_NODE_VERSION = "24"
