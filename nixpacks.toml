@@ -1,4 +1,5 @@
-# Nixpacks v1.38 only supports Node majors 16/18/20/22/24 (not 23 — unknown → nodejs_18).
-# nodejs_22 is 22.11.x, below Vite 8's >=22.12. Use 24 for a new-enough runtime.
-[variables]
-NIXPACKS_NODE_VERSION = "24"
+# Hard-pin Node 24: Railway/Nixpacks must use this nixpkgs snapshot (same hash Nixpacks maps to nodejs_24).
+# Relying only on package.json engines can be skipped if the wrong commit or config is picked up.
+[phases.setup]
+nixpkgsArchive = "23f9169c4ccce521379e602cc82ed873a1f1b52b"
+nixPkgs = ["nodejs_24", "npm-9_x"]
