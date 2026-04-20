@@ -18,9 +18,17 @@ const app = express()
 // Railway (and other reverse proxies) terminate TLS; trust first hop for secure cookies / req.secure.
 app.set('trust proxy', 1)
 
+const allowedOrigins = env.CORS_ORIGIN.split(',').map((s) => s.trim()).filter(Boolean)
+
 app.use(
   cors({
-    origin: env.CORS_ORIGIN,
+    origin: (origin, callback) => {
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true)
+      } else {
+        callback(new Error(`CORS blocked: ${origin}`))
+      }
+    },
     credentials: true,
   }),
 )
