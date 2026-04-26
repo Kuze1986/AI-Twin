@@ -3,10 +3,11 @@ import { Router } from 'express'
 import { z } from 'zod'
 import type { AuthedRequest } from '../authMiddleware.js'
 import { requireUserAuth } from '../authMiddleware.js'
+import { fetchDemoForgeSessionState } from '../crucibleClient.js'
 import { getIdentity, getModeConfig, getTopLongTermMemory } from '../data.js'
 import { env } from '../env.js'
 import { buildSystemPrompt } from '../promptBuilder.js'
-import type { ChatMode } from '../types.js'
+import type { ChatMode, DemoForgeContext } from '../types.js'
 import { budgetHistory, type HistoryTurn } from '../tokenBudget.js'
 import { supabaseAdmin } from '../supabaseAdmin.js'
 
@@ -19,9 +20,26 @@ const bodySchema = z.object({
   context_override: z.string().max(100_000).optional(),
 })
 
+const demoForgeSchema = z.object({
+  demoforge_session_id: z.string(),
+  tenant_id: z.string(),
+  journey_node_id: z.string(),
+  kuze_mode: z.enum(['ambassador', 'insider', 'operator']),
+  user_message: z.string().min(1).max(20_000),
+  conversation_history: z
+    .array(
+      z.object({
+        role: z.enum(['user', 'assistant']),
+        content: z.string(),
+      }),
+    )
+    .optional(),
+})
+
 const anthropic = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY })
 
 export const chatRouter = Router()
+const demoforgeRateLimiter: Map<string, { count: number; windowStart: number }> = new Map()
 
 chatRouter.post('/', requireUserAuth, async (req, res) => {
   const parsed = bodySchema.safeParse(req.body)
@@ -169,6 +187,148 @@ chatRouter.post('/', requireUserAuth, async (req, res) => {
     .from('chat_sessions')
     .update({ last_activity_at: new Date().toISOString() })
     .eq('id', sessionId)
+
+  send({ type: 'done' })
+  res.end()
+})
+
+chatRouter.post('/demoforge', async (req, res) => {
+  const key = req.header('x-bioloop-key')
+  if (!key || key !== env.BIOLOOP_SERVICE_KEY) {
+    res.status(401).json({ error: { code: 'unauthorized', message: 'Invalid x-bioloop-key' } })
+    return
+  }
+
+  const parsed = demoForgeSchema.safeParse(req.body)
+  if (!parsed.success) {
+    res.status(400).json({ error: { code: 'validation', message: parsed.error.message } })
+    return
+  }
+
+  const {
+    demoforge_session_id,
+    tenant_id,
+    journey_node_id,
+    kuze_mode,
+    user_message,
+    conversation_history,
+  } = parsed.data
+
+  const now = Date.now()
+  const current = demoforgeRateLimiter.get(demoforge_session_id)
+  if (current && now - current.windowStart < 60_000) {
+    if (current.count >= 20) {
+      res.status(429).json({
+        error: { code: 'rate_limited', message: 'Too many requests for this session' },
+      })
+      return
+    }
+    current.count += 1
+  } else {
+    demoforgeRateLimiter.set(demoforge_session_id, { count: 1, windowStart: now })
+  }
+
+  const crucibleState = await fetchDemoForgeSessionState({ sessionId: demoforge_session_id })
+
+  const identity = await getIdentity()
+  if (!identity) {
+    res.status(503).json({ error: { code: 'not_configured', message: 'Identity profile missing' } })
+    return
+  }
+
+  const modeConfig = await getModeConfig('ambassador')
+  const ltm = await getTopLongTermMemory(10)
+
+  const demoForgeContext: DemoForgeContext = {
+    tenant_id,
+    demoforge_session_id,
+    journey_node_id,
+    kuze_mode,
+    engagement_trajectory: crucibleState?.engagement_trajectory ?? null,
+    friction_points: crucibleState?.friction_points ?? [],
+    recommended_pivot: crucibleState?.recommended_pivot ?? null,
+    behavioral_confidence: crucibleState?.confidence,
+  }
+
+  const systemPrompt = buildSystemPrompt({
+    identity,
+    mode: 'ambassador',
+    modeConfig,
+    longTermTop: ltm,
+    demoForgeContext,
+  })
+
+  const messages: Anthropic.MessageParam[] = [
+    ...((conversation_history ?? []).map((t) => ({
+      role: t.role,
+      content: t.content,
+    })) as Anthropic.MessageParam[]),
+    { role: 'user', content: user_message },
+  ]
+
+  res.setHeader('Content-Type', 'text/event-stream; charset=utf-8')
+  res.setHeader('Cache-Control', 'no-cache, no-transform')
+  res.setHeader('Connection', 'keep-alive')
+  res.flushHeaders?.()
+
+  const send = (obj: unknown) => {
+    res.write(`data: ${JSON.stringify(obj)}\n\n`)
+  }
+
+  send({ type: 'meta', session_id: demoforge_session_id })
+
+  let assistantText = ''
+  try {
+    const stream = anthropic.messages.stream({
+      model: env.ANTHROPIC_MODEL,
+      max_tokens: 8192,
+      system: systemPrompt,
+      messages,
+    })
+    stream.on('text', (textDelta) => {
+      send({ type: 'text', text: textDelta })
+    })
+    assistantText = await stream.finalText()
+  } catch (e: unknown) {
+    const err = e as Error & { status?: number }
+    const message = err.message ?? 'Claude request failed'
+    send({ type: 'error', error: { code: 'claude_error', message } })
+    res.end()
+    return
+  }
+
+  const baseUrl = process.env.CRUCIBLE_SIM_BASE_URL
+  if (baseUrl) {
+    void (async () => {
+      try {
+        await fetch(
+          `${baseUrl.replace(/\/+$/, '')}/api/crucible/session/${encodeURIComponent(demoforge_session_id)}/signal`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'x-bioloop-key': env.BIOLOOP_SERVICE_KEY,
+            },
+            body: JSON.stringify({
+              tenant_id,
+              kuze_mode,
+              journey_node_id,
+              signals: [
+                {
+                  signal_type: 'kuze_response',
+                  value: assistantText.length,
+                  timestamp: new Date().toISOString(),
+                  source: 'kuze_adaptation',
+                },
+              ],
+            }),
+          },
+        )
+      } catch {
+        // Intentionally silent; signal dispatch must never break response flow.
+      }
+    })()
+  }
 
   send({ type: 'done' })
   res.end()

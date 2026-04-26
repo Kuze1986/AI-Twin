@@ -75,4 +75,36 @@ setInterval(() => {
 
 app.listen(env.PORT, () => {
   console.log(`[ai-twin] server listening on ${env.PORT}`)
+  console.log('[startup] DemoForge endpoint: POST /api/chat/demoforge')
+
+  if (env.CRUCIBLE_SIM_BASE_URL) {
+    void (async () => {
+      try {
+        const res = await fetch(`${env.CRUCIBLE_SIM_BASE_URL.replace(/\/+$/, '')}/api/health`, {
+          method: 'GET',
+          headers: {
+            'x-bioloop-key': env.CRUCIBLE_SIM_API_KEY,
+          },
+          signal: AbortSignal.timeout(3000),
+        })
+
+        if (res.ok) {
+          console.log('[startup] Crucible reachable at', env.CRUCIBLE_SIM_BASE_URL)
+          return
+        }
+
+        console.warn(
+          '[startup] Crucible responded with status',
+          res.status,
+          '— behavioral loop may be degraded',
+        )
+      } catch {
+        console.warn(
+          '[startup] Crucible unreachable at',
+          env.CRUCIBLE_SIM_BASE_URL,
+          '— DemoForge sessions will use default behavior',
+        )
+      }
+    })()
+  }
 })

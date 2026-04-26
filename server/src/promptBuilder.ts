@@ -1,4 +1,10 @@
-import type { BehavioralRules, ChatMode, ContextBlock, StyleFingerprint } from './types.js'
+import type {
+  BehavioralRules,
+  ChatMode,
+  ContextBlock,
+  DemoForgeContext,
+  StyleFingerprint,
+} from './types.js'
 
 export interface ModeConfigRow {
   mode: string
@@ -81,9 +87,10 @@ export function buildSystemPrompt(args: {
   mode: ChatMode
   modeConfig: ModeConfigRow | null
   longTermTop: LtmRow[]
+  demoForgeContext?: DemoForgeContext | null
   contextOverride?: string
 }): string {
-  const { identity, modeConfig, longTermTop, contextOverride } = args
+  const { identity, modeConfig, longTermTop, demoForgeContext, contextOverride } = args
   const blocks = asBlocks(identity.context_blocks)
   const filtered = filterContextBlocks(blocks, modeConfig?.context_block_tag ?? null)
 
@@ -110,6 +117,53 @@ export function buildSystemPrompt(args: {
   parts.push(`## LONG_TERM_MEMORY (top weighted)\n${formatLtm(longTermTop)}`)
 
   parts.push(formatStyleFingerprintBlock(identity.style_fingerprint))
+
+  if (demoForgeContext) {
+    const engagementDescriptions: Record<'rising' | 'falling' | 'stable' | 'volatile', string> = {
+      rising: 'prospect is deepening engagement',
+      falling: 'interest declining',
+      stable: 'baseline maintained',
+      volatile: 'inconsistent signals',
+    }
+    const engagement = demoForgeContext.engagement_trajectory
+    const engagementLine =
+      engagement && engagement in engagementDescriptions
+        ? `${engagement} — ${engagementDescriptions[engagement]}`
+        : '(unknown)'
+    const friction =
+      demoForgeContext.friction_points && demoForgeContext.friction_points.length > 0
+        ? demoForgeContext.friction_points.join(', ')
+        : '(none detected)'
+    const confidence =
+      demoForgeContext.behavioral_confidence ??
+      (demoForgeContext as DemoForgeContext & { confidence?: number }).confidence
+
+    const demoForgeLines = [
+      '## DEMOFORGE_LIVE_CONTEXT',
+      'You are operating in Ambassador mode inside a live DemoForge demo session.',
+      `Tenant: ${demoForgeContext.tenant_id}`,
+      `Journey position: ${demoForgeContext.journey_node_id}`,
+      '',
+      'BEHAVIORAL INTELLIGENCE (live, from Crucible):',
+      `- Engagement trajectory: ${engagementLine}`,
+      `- Friction points: ${friction}`,
+      `- Recommended pivot: ${demoForgeContext.recommended_pivot ?? '(none)'}`,
+      `- Signal confidence: ${confidence ?? '(unknown)'}`,
+    ]
+
+    if (typeof confidence === 'number' && confidence < 0.4) {
+      demoForgeLines.push(
+        'These signals are early — weight lightly and default to persona-driven behavior.',
+      )
+    }
+    if (engagement === 'falling' && demoForgeContext.recommended_pivot) {
+      demoForgeLines.push(
+        'Actively work toward the recommended pivot in your next response.',
+      )
+    }
+
+    parts.push(demoForgeLines.join('\n'))
+  }
 
   if (contextOverride?.trim()) {
     parts.push(`## CONTEXT_OVERRIDE (user-requested)\n${contextOverride.trim()}`)

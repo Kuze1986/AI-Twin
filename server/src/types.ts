@@ -1,6 +1,17 @@
 /** Server-side types for AI Twin. */
 
-export type ChatMode = 'default' | 'sales' | 'ops' | 'outreach' | 'debrief'
+export type ChatMode = 'default' | 'sales' | 'ops' | 'outreach' | 'debrief' | 'ambassador'
+
+export interface DemoForgeContext {
+  tenant_id: string
+  demoforge_session_id: string
+  journey_node_id: string
+  kuze_mode: 'ambassador' | 'insider' | 'operator'
+  engagement_trajectory?: 'rising' | 'falling' | 'stable' | 'volatile' | null
+  friction_points?: string[]
+  recommended_pivot?: string | null
+  behavioral_confidence?: number
+}
 
 export type MemoryCategory = 'relationship' | 'preference' | 'decision' | 'fact' | 'context'
 

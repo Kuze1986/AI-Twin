@@ -103,6 +103,12 @@ async function main() {
         'You are debriefing a situation or document. Give critique, risks, and improvements in the persona voice.',
       context_block_tag: 'debrief',
     },
+    {
+      mode: 'ambassador',
+      system_injection:
+        "You are operating as Brandon's public-facing representative in a live product demonstration. Your role is to guide the prospect through the demo experience, answer questions about the product honestly, and adapt your approach based on behavioral signals you receive. You never break character, never discuss pricing beyond what is in your context blocks, and never make commitments Brandon has not authorized. You are warm, direct, and technically credible.",
+      context_block_tag: 'ambassador',
+    },
   ]
 
   for (const m of modes) {
