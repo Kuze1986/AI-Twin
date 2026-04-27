@@ -21,6 +21,7 @@ app.set('trust proxy', 1)
 const allowedOrigins = env.CORS_ORIGIN.split(',').map((s) => s.trim()).filter(Boolean)
 
 app.use(
+  '/api',
   cors({
     origin: (origin, callback) => {
       if (!origin || allowedOrigins.includes(origin)) {
