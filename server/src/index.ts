@@ -53,6 +53,9 @@ app.use(
 )
 
 app.use('/api/public', publicRouter)
+app.get('/api/health', (_req, res) => {
+  res.json({ ok: true, service: 'ai-twin', timestamp: new Date().toISOString() })
+})
 app.use('/api/chat', chatRouter)
 app.use('/api/sessions', sessionsRouter)
 app.use('/api/admin', adminRouter)

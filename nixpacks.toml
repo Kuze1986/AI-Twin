@@ -7,3 +7,7 @@ nixPkgs = ["nodejs_24", "npm-9_x"]
 [variables]
 # Keep workspace devDependencies (tsc/vite) installed during build.
 NPM_CONFIG_PRODUCTION = "false"
+
+[phases.install]
+# Be explicit: Railway must install workspace dev deps for client build tools (tsc/vite).
+cmds = ["npm ci --include=dev"]

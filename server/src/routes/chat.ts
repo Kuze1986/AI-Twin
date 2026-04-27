@@ -307,7 +307,7 @@ chatRouter.post('/demoforge', async (req, res) => {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
-              'x-bioloop-key': env.BIOLOOP_SERVICE_KEY,
+              'x-bioloop-key': env.CRUCIBLE_SIM_API_KEY,
             },
             body: JSON.stringify({
               tenant_id,
