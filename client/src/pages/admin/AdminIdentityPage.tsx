@@ -1,21 +1,29 @@
 import { useEffect, useState } from 'react'
 import { adminFetch } from '../../lib/api'
 
+type ContextBlock = { id: string; title: string; body: string; tags?: string[] }
+
 type Identity = {
   id: string
   twin_name: string
   persona_prompt: string
-  context_blocks: { id: string; title: string; body: string; tags?: string[] }[]
+  context_blocks: ContextBlock[]
   behavioral_rules: Record<string, unknown>
   version: number
 }
+
+const newBlockId = () =>
+  typeof crypto !== 'undefined' && 'randomUUID' in crypto
+    ? crypto.randomUUID()
+    : `block_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
 
 export function AdminIdentityPage() {
   const [row, setRow] = useState<Identity | null>(null)
   const [twinName, setTwinName] = useState('')
   const [persona, setPersona] = useState('')
-  const [blocksJson, setBlocksJson] = useState('[]')
+  const [blocks, setBlocks] = useState<ContextBlock[]>([])
   const [rulesJson, setRulesJson] = useState('{}')
+  const [showRawBlocks, setShowRawBlocks] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [history, setHistory] = useState<unknown[]>([])
@@ -30,7 +38,7 @@ export function AdminIdentityPage() {
           r.persona_prompt ||
             '## WHO I AM\n\n## HOW I COMMUNICATE\n\n## WHAT I KNOW\n\n## HOW I MAKE DECISIONS\n\n## WHAT I NEVER DO\n\n## MY VOCABULARY\n',
         )
-        setBlocksJson(JSON.stringify(r.context_blocks ?? [], null, 2))
+        setBlocks(Array.isArray(r.context_blocks) ? r.context_blocks : [])
         setRulesJson(JSON.stringify(r.behavioral_rules ?? {}, null, 2))
       })
       .catch((e) => setError(String(e)))
@@ -43,22 +51,33 @@ export function AdminIdentityPage() {
     load()
   }, [])
 
+  const updateBlock = (id: string, patch: Partial<ContextBlock>) => {
+    setBlocks((prev) => prev.map((b) => (b.id === id ? { ...b, ...patch } : b)))
+  }
+
+  const addBlock = () => {
+    setBlocks((prev) => [...prev, { id: newBlockId(), title: '', body: '', tags: [] }])
+  }
+
+  const removeBlock = (id: string) => {
+    setBlocks((prev) => prev.filter((b) => b.id !== id))
+  }
+
   const save = async () => {
     setError(null)
-    let context_blocks: Identity['context_blocks']
     let behavioral_rules: Record<string, unknown>
-    try {
-      context_blocks = JSON.parse(blocksJson) as Identity['context_blocks']
-    } catch {
-      setError('context_blocks must be valid JSON array')
-      return
-    }
     try {
       behavioral_rules = JSON.parse(rulesJson) as Record<string, unknown>
     } catch {
       setError('behavioral_rules must be valid JSON object')
       return
     }
+    const cleanedBlocks: ContextBlock[] = blocks.map((b) => ({
+      id: b.id,
+      title: b.title,
+      body: b.body,
+      tags: (b.tags ?? []).filter((t) => t.trim().length > 0),
+    }))
     setSaving(true)
     try {
       const updated = (await adminFetch('/identity', {
@@ -66,11 +85,12 @@ export function AdminIdentityPage() {
         body: JSON.stringify({
           twin_name: twinName,
           persona_prompt: persona,
-          context_blocks,
+          context_blocks: cleanedBlocks,
           behavioral_rules,
         }),
       })) as Identity
       setRow(updated)
+      setBlocks(updated.context_blocks ?? [])
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Save failed')
     } finally {
@@ -97,12 +117,79 @@ export function AdminIdentityPage() {
         value={persona}
         onChange={(e) => setPersona(e.target.value)}
       />
-      <label className="mb-1 block text-sm">context_blocks (JSON array)</label>
-      <textarea
-        className="mb-4 min-h-[120px] w-full rounded border border-zinc-300 bg-white p-3 font-mono text-sm dark:border-zinc-600 dark:bg-zinc-900"
-        value={blocksJson}
-        onChange={(e) => setBlocksJson(e.target.value)}
-      />
+      <div className="mb-2 flex items-center justify-between">
+        <label className="text-sm">Context blocks</label>
+        <div className="flex items-center gap-3 text-xs">
+          <button
+            type="button"
+            className="underline"
+            onClick={() => setShowRawBlocks((v) => !v)}
+          >
+            {showRawBlocks ? 'Hide raw JSON' : 'Show raw JSON'}
+          </button>
+          <button
+            type="button"
+            className="rounded border border-zinc-300 px-2 py-1 dark:border-zinc-700"
+            onClick={addBlock}
+          >
+            + Add block
+          </button>
+        </div>
+      </div>
+      <ul className="mb-4 space-y-3">
+        {blocks.length === 0 && (
+          <li className="rounded border border-dashed border-zinc-300 p-3 text-xs text-zinc-500 dark:border-zinc-700">
+            No context blocks yet. Click <span className="font-medium">+ Add block</span> to create one.
+          </li>
+        )}
+        {blocks.map((b) => (
+          <li
+            key={b.id}
+            className="rounded border border-zinc-200 p-3 dark:border-zinc-800"
+          >
+            <div className="mb-2 flex items-center gap-2">
+              <input
+                placeholder="Title"
+                className="flex-1 rounded border border-zinc-300 bg-white px-2 py-1 text-sm dark:border-zinc-600 dark:bg-zinc-900"
+                value={b.title}
+                onChange={(e) => updateBlock(b.id, { title: e.target.value })}
+              />
+              <button
+                type="button"
+                className="rounded border border-red-300 px-2 py-1 text-xs text-red-600 dark:border-red-800"
+                onClick={() => removeBlock(b.id)}
+              >
+                Delete
+              </button>
+            </div>
+            <textarea
+              placeholder="Body"
+              className="mb-2 min-h-[80px] w-full rounded border border-zinc-300 bg-white p-2 text-sm dark:border-zinc-600 dark:bg-zinc-900"
+              value={b.body}
+              onChange={(e) => updateBlock(b.id, { body: e.target.value })}
+            />
+            <input
+              placeholder="Tags (comma-separated, e.g. sales,outreach)"
+              className="w-full rounded border border-zinc-300 bg-white px-2 py-1 text-xs dark:border-zinc-600 dark:bg-zinc-900"
+              value={(b.tags ?? []).join(', ')}
+              onChange={(e) =>
+                updateBlock(b.id, {
+                  tags: e.target.value
+                    .split(',')
+                    .map((t) => t.trim())
+                    .filter((t) => t.length > 0),
+                })
+              }
+            />
+            <p className="mt-1 text-[10px] text-zinc-500">id: {b.id}</p>
+          </li>
+        ))}
+      </ul>
+      {showRawBlocks && (
+        <pre className="mb-4 max-h-60 overflow-auto rounded border border-zinc-200 bg-zinc-50 p-3 text-xs dark:border-zinc-800 dark:bg-zinc-900">
+          {JSON.stringify(blocks, null, 2)}
+        </pre>
+      )}
       <label className="mb-1 block text-sm">behavioral_rules (JSON)</label>
       <textarea
         className="mb-4 min-h-[120px] w-full rounded border border-zinc-300 bg-white p-3 font-mono text-sm dark:border-zinc-600 dark:bg-zinc-900"

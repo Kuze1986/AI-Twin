@@ -40,6 +40,25 @@ const anthropic = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY })
 
 export const chatRouter = Router()
 const demoforgeRateLimiter: Map<string, { count: number; windowStart: number }> = new Map()
+const userChatRateLimiter: Map<string, { count: number; windowStart: number }> = new Map()
+
+// Returns true when the request is allowed and false when the cap is exceeded
+// for the current 60s rolling window.
+function takeRateSlot(
+  store: Map<string, { count: number; windowStart: number }>,
+  key: string,
+  limit: number,
+): boolean {
+  const now = Date.now()
+  const current = store.get(key)
+  if (current && now - current.windowStart < 60_000) {
+    if (current.count >= limit) return false
+    current.count += 1
+    return true
+  }
+  store.set(key, { count: 1, windowStart: now })
+  return true
+}
 
 chatRouter.post('/', requireUserAuth, async (req, res) => {
   const parsed = bodySchema.safeParse(req.body)
@@ -49,6 +68,14 @@ chatRouter.post('/', requireUserAuth, async (req, res) => {
   }
 
   const userId = (req as AuthedRequest).userId
+
+  if (!takeRateSlot(userChatRateLimiter, userId, 30)) {
+    res.status(429).json({
+      error: { code: 'rate_limited', message: 'Too many chat requests; slow down and retry shortly.' },
+    })
+    return
+  }
+
   const { mode, user_message, context_override } = parsed.data
   let sessionId = parsed.data.session_id
 
@@ -192,6 +219,13 @@ chatRouter.post('/', requireUserAuth, async (req, res) => {
   res.end()
 })
 
+// Backup Kuze narration adapter. The canonical narrator for DemoForge is
+// `demoforge/app/api/kuze-chat/route.ts` — that is what the DemoForge UI
+// invokes today. This `/demoforge` route exists for parity and for any
+// future wiring that needs Crucible-aware context to be applied via the
+// AI Twin identity/mode pipeline. If you ever cut DemoForge over to call
+// this endpoint, align the prompt assembly here with
+// `demoforge/lib/kuze/assembly.ts` so the Kuze voice stays consistent.
 chatRouter.post('/demoforge', async (req, res) => {
   const key = req.header('x-bioloop-key')
   if (!key || key !== env.BIOLOOP_SERVICE_KEY) {
@@ -214,18 +248,11 @@ chatRouter.post('/demoforge', async (req, res) => {
     conversation_history,
   } = parsed.data
 
-  const now = Date.now()
-  const current = demoforgeRateLimiter.get(demoforge_session_id)
-  if (current && now - current.windowStart < 60_000) {
-    if (current.count >= 20) {
-      res.status(429).json({
-        error: { code: 'rate_limited', message: 'Too many requests for this session' },
-      })
-      return
-    }
-    current.count += 1
-  } else {
-    demoforgeRateLimiter.set(demoforge_session_id, { count: 1, windowStart: now })
+  if (!takeRateSlot(demoforgeRateLimiter, demoforge_session_id, 20)) {
+    res.status(429).json({
+      error: { code: 'rate_limited', message: 'Too many requests for this session' },
+    })
+    return
   }
 
   const crucibleState = await fetchDemoForgeSessionState({ sessionId: demoforge_session_id })
@@ -300,32 +327,39 @@ chatRouter.post('/demoforge', async (req, res) => {
   const baseUrl = process.env.CRUCIBLE_SIM_BASE_URL
   if (baseUrl) {
     void (async () => {
+      const signalUrl = `${baseUrl.replace(/\/+$/, '')}/api/crucible/session/${encodeURIComponent(demoforge_session_id)}/signal`
       try {
-        await fetch(
-          `${baseUrl.replace(/\/+$/, '')}/api/crucible/session/${encodeURIComponent(demoforge_session_id)}/signal`,
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'x-bioloop-key': env.CRUCIBLE_SIM_API_KEY,
-            },
-            body: JSON.stringify({
-              tenant_id,
-              kuze_mode,
-              journey_node_id,
-              signals: [
-                {
-                  signal_type: 'kuze_response',
-                  value: assistantText.length,
-                  timestamp: new Date().toISOString(),
-                  source: 'kuze_adaptation',
-                },
-              ],
-            }),
+        const resp = await fetch(signalUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-bioloop-key': env.CRUCIBLE_SIM_API_KEY,
           },
+          body: JSON.stringify({
+            tenant_id,
+            kuze_mode,
+            journey_node_id,
+            signals: [
+              {
+                signal_type: 'kuze_response',
+                value: assistantText.length,
+                timestamp: new Date().toISOString(),
+                source: 'kuze_adaptation',
+              },
+            ],
+          }),
+        })
+        if (!resp.ok) {
+          // Non-blocking: log and move on so operators can spot degradation.
+          console.warn(
+            `[crucible-signal] non-2xx for session ${demoforge_session_id}: ${resp.status} ${resp.statusText}`,
+          )
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err)
+        console.warn(
+          `[crucible-signal] dispatch failed for session ${demoforge_session_id}: ${msg}`,
         )
-      } catch {
-        // Intentionally silent; signal dispatch must never break response flow.
       }
     })()
   }

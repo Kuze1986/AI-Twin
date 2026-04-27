@@ -18,21 +18,43 @@ type Turn = {
   created_at: string
 }
 
+type SessionsResponse = {
+  items: SessionRow[]
+  total: number
+  limit: number
+  offset: number
+}
+
+const PAGE_SIZE = 25
+
 export function AdminSessionsPage() {
   const [sessions, setSessions] = useState<SessionRow[]>([])
+  const [total, setTotal] = useState(0)
+  const [offset, setOffset] = useState(0)
   const [open, setOpen] = useState<string | null>(null)
   const [transcript, setTranscript] = useState<Turn[]>([])
   const [error, setError] = useState<string | null>(null)
 
-  const load = () => {
-    adminFetch('/sessions')
-      .then((d) => setSessions(d as SessionRow[]))
+  const load = (nextOffset = offset) => {
+    adminFetch(`/sessions?limit=${PAGE_SIZE}&offset=${nextOffset}`)
+      .then((d) => {
+        // Tolerate the legacy array shape in case the deployed server is older.
+        if (Array.isArray(d)) {
+          setSessions(d as SessionRow[])
+          setTotal((d as SessionRow[]).length)
+          return
+        }
+        const r = d as SessionsResponse
+        setSessions(r.items)
+        setTotal(r.total)
+      })
       .catch((e) => setError(String(e)))
   }
 
   useEffect(() => {
-    load()
-  }, [])
+    load(offset)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [offset])
 
   const view = async (id: string) => {
     setOpen(id)
@@ -74,6 +96,29 @@ export function AdminSessionsPage() {
         Browse transcripts, flag for review, or trigger memory consolidation manually.
       </p>
       {error && <p className="mb-3 text-sm text-red-600">{error}</p>}
+      <div className="mb-3 flex items-center gap-3 text-xs text-zinc-600 dark:text-zinc-400">
+        <span>
+          {total === 0
+            ? 'No sessions'
+            : `Showing ${offset + 1}–${Math.min(offset + sessions.length, total)} of ${total}`}
+        </span>
+        <button
+          type="button"
+          className="rounded border border-zinc-300 px-2 py-1 disabled:opacity-40 dark:border-zinc-700"
+          onClick={() => setOffset((o) => Math.max(0, o - PAGE_SIZE))}
+          disabled={offset === 0}
+        >
+          Prev
+        </button>
+        <button
+          type="button"
+          className="rounded border border-zinc-300 px-2 py-1 disabled:opacity-40 dark:border-zinc-700"
+          onClick={() => setOffset((o) => o + PAGE_SIZE)}
+          disabled={offset + sessions.length >= total}
+        >
+          Next
+        </button>
+      </div>
       <ul className="space-y-2 text-sm">
         {sessions.map((s) => (
           <li

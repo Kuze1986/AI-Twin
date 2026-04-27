@@ -291,17 +291,22 @@ adminRouter.delete('/long-term-memory/:id', requireAdmin, async (req, res) => {
   res.json({ ok: true })
 })
 
-adminRouter.get('/sessions', requireAdmin, async (_req, res) => {
-  const { data, error } = await supabaseAdmin
+adminRouter.get('/sessions', requireAdmin, async (req, res) => {
+  const limitRaw = Number.parseInt(String(req.query.limit ?? ''), 10)
+  const offsetRaw = Number.parseInt(String(req.query.offset ?? ''), 10)
+  const limit = Number.isFinite(limitRaw) ? Math.min(Math.max(limitRaw, 1), 200) : 25
+  const offset = Number.isFinite(offsetRaw) && offsetRaw > 0 ? offsetRaw : 0
+
+  const { data, error, count } = await supabaseAdmin
     .from('chat_sessions')
-    .select('*')
+    .select('*', { count: 'exact' })
     .order('created_at', { ascending: false })
-    .limit(200)
+    .range(offset, offset + limit - 1)
   if (error) {
     res.status(500).json({ error: { code: 'db_error', message: error.message } })
     return
   }
-  res.json(data ?? [])
+  res.json({ items: data ?? [], total: count ?? 0, limit, offset })
 })
 
 adminRouter.get('/sessions/:id/transcript', requireAdmin, async (req, res) => {
