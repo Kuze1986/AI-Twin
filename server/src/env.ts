@@ -11,6 +11,7 @@ export const env = {
   PORT: Number(process.env.PORT ?? 3001),
   ANTHROPIC_API_KEY: req('ANTHROPIC_API_KEY'),
   ANTHROPIC_MODEL: process.env.ANTHROPIC_MODEL ?? 'claude-sonnet-4-20250514',
+  ANTHROPIC_BASE_URL: process.env.ANTHROPIC_BASE_URL,
   SUPABASE_URL: req('SUPABASE_URL'),
   SUPABASE_SERVICE_ROLE_KEY: req('SUPABASE_SERVICE_ROLE_KEY'),
   MAX_HISTORY_TOKENS: Number(process.env.MAX_HISTORY_TOKENS ?? 3000),
@@ -22,4 +23,7 @@ export const env = {
   CORS_ORIGIN: process.env.CORS_ORIGIN ?? 'http://localhost:5173',
   CONSOLIDATION_INTERVAL_MS: Number(process.env.CONSOLIDATION_INTERVAL_MS ?? 60_000),
   INACTIVITY_MS: Number(process.env.INACTIVITY_MS ?? 5 * 60 * 1000),
+  KUZE_INFERENCE_PROVIDER: process.env.KUZE_INFERENCE_PROVIDER ?? 'anthropic',
+  KUZE_OPENAI_BASE_URL: process.env.KUZE_OPENAI_BASE_URL,
+  KUZE_OPENAI_API_KEY: process.env.KUZE_OPENAI_API_KEY,
 }

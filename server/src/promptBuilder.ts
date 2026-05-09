@@ -5,6 +5,12 @@ import type {
   DemoForgeContext,
   StyleFingerprint,
 } from './types.js'
+import { createClient } from '@supabase/supabase-js'
+
+const supabase = createClient(
+  process.env.SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+)
 
 export interface ModeConfigRow {
   mode: string
@@ -25,6 +31,11 @@ export interface LtmRow {
   category: string
   weight: number
   created_at: string
+}
+
+export interface OperatingParameterRow {
+  section_name: string
+  content: unknown
 }
 
 function asBlocks(raw: unknown): ContextBlock[] {
@@ -72,6 +83,30 @@ function formatLtm(rows: LtmRow[]): string {
     .join('\n')
 }
 
+async function loadOperatingParameters(): Promise<string> {
+  try {
+    const { data: params, error } = await supabase
+      .from('operating_parameters')
+      .select('section_name, content')
+      .eq('is_active', true)
+      .order('section')
+
+    if (error || !params || params.length === 0) {
+      return ''
+    }
+
+    const paramBlock = `\n\n---\nOPERATIONAL PARAMETERS (binding, current as of last amendment):\n` +
+      params
+        .map((p: OperatingParameterRow) => `${p.section_name.toUpperCase()}:\n${JSON.stringify(p.content, null, 2)}`)
+        .join('\n\n')
+
+    return paramBlock
+  } catch (e) {
+    console.error('Failed to load operating parameters:', e)
+    return ''
+  }
+}
+
 /**
  * Assembles the single system prompt in the required order:
  * 1. persona_prompt first
@@ -81,15 +116,16 @@ function formatLtm(rows: LtmRow[]): string {
  * 5. top long-term memories
  * 6. style fingerprint (separate block)
  * 7. optional context_override (last among static blocks)
+ * 8. operating parameters (dynamic, loaded at runtime)
  */
-export function buildSystemPrompt(args: {
+export async function buildSystemPrompt(args: {
   identity: IdentityRow
   mode: ChatMode
   modeConfig: ModeConfigRow | null
   longTermTop: LtmRow[]
   demoForgeContext?: DemoForgeContext | null
   contextOverride?: string
-}): string {
+}): Promise<string> {
   const { identity, modeConfig, longTermTop, demoForgeContext, contextOverride } = args
   const blocks = asBlocks(identity.context_blocks)
   const filtered = filterContextBlocks(blocks, modeConfig?.context_block_tag ?? null)
@@ -167,6 +203,11 @@ export function buildSystemPrompt(args: {
 
   if (contextOverride?.trim()) {
     parts.push(`## CONTEXT_OVERRIDE (user-requested)\n${contextOverride.trim()}`)
+  }
+
+  const operatingParams = await loadOperatingParameters()
+  if (operatingParams) {
+    parts.push(operatingParams)
   }
 
   return parts.join('\n\n')

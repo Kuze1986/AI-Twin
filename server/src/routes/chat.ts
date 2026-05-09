@@ -1,4 +1,3 @@
-import Anthropic from '@anthropic-ai/sdk'
 import { Router } from 'express'
 import { z } from 'zod'
 import type { AuthedRequest } from '../authMiddleware.js'
@@ -10,6 +9,14 @@ import { buildSystemPrompt } from '../promptBuilder.js'
 import type { ChatMode, DemoForgeContext } from '../types.js'
 import { budgetHistory, type HistoryTurn } from '../tokenBudget.js'
 import { supabaseAdmin } from '../supabaseAdmin.js'
+import { messagesCreate as anthropicMessagesCreate } from '../inference/messagesCreate.js'
+import {
+  runValidators,
+  logViolation,
+  regenerateWithCorrection,
+  secondPassReview,
+  type ValidatorContext
+} from '../validators/index.js'
 
 const modeEnum = z.enum(['default', 'sales', 'ops', 'outreach', 'debrief'])
 
@@ -35,8 +42,6 @@ const demoForgeSchema = z.object({
     )
     .optional(),
 })
-
-const anthropic = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY })
 
 export const chatRouter = Router()
 const demoforgeRateLimiter: Map<string, { count: number; windowStart: number }> = new Map()
@@ -136,7 +141,7 @@ chatRouter.post('/', requireUserAuth, async (req, res) => {
 
   const modeConfig = await getModeConfig(mode)
   const ltm = await getTopLongTermMemory(10)
-  const systemPrompt = buildSystemPrompt({
+  const systemPrompt = await buildSystemPrompt({
     identity,
     mode: mode as ChatMode,
     modeConfig,
@@ -161,7 +166,7 @@ chatRouter.post('/', requireUserAuth, async (req, res) => {
   }))
 
   const budgeted = budgetHistory(historyTurns, env.MAX_HISTORY_TOKENS)
-  const messages: Anthropic.MessageParam[] = budgeted.map((t) => ({
+  const messages = budgeted.map((t) => ({
     role: t.role,
     content: t.content,
   }))
@@ -179,20 +184,137 @@ chatRouter.post('/', requireUserAuth, async (req, res) => {
 
   let assistantText = ''
   try {
-    const stream = anthropic.messages.stream({
+    const stream = await anthropicMessagesCreate({
       model: env.ANTHROPIC_MODEL,
       max_tokens: 8192,
       system: systemPrompt,
       messages,
+      stream: true,
     })
-    stream.on('text', (textDelta) => {
+    stream.on('text', (textDelta: string) => {
       send({ type: 'text', text: textDelta })
     })
     assistantText = await stream.finalText()
   } catch (e: unknown) {
     const err = e as Error & { status?: number }
-    const message = err.message ?? 'Claude request failed'
-    send({ type: 'error', error: { code: 'claude_error', message } })
+    const message = err.message ?? 'AI request failed'
+    send({ type: 'error', error: { code: 'inference_error', message } })
+    res.end()
+    return
+  }
+
+  // Run validators on the generated output
+  const validatorContext: ValidatorContext = {
+    mode,
+    recipientContext: context_override
+  }
+  const validationResults = await runValidators(assistantText, validatorContext)
+
+  // Check for hard violations
+  const hardViolations = validationResults.filter((r) => !r.passed && r.severity === 'hard')
+
+  if (hardViolations.length > 0) {
+    // Attempt regeneration with correction
+    let regeneratedText = assistantText
+    let resolution: 'refused' | 'regenerated' | 'escalated' = 'refused'
+
+    try {
+      regeneratedText = await regenerateWithCorrection(
+        systemPrompt,
+        hardViolations[0],
+        messages,
+        anthropicMessagesCreate
+      )
+      resolution = 'regenerated'
+
+      // Validate the regenerated output
+      const regeneratedValidation = await runValidators(regeneratedText, validatorContext)
+      const regeneratedHardViolations = regeneratedValidation.filter((r) => !r.passed && r.severity === 'hard')
+
+      if (regeneratedHardViolations.length > 0) {
+        // Regeneration still has violations - refuse
+        resolution = 'refused'
+      } else {
+        // Regeneration passed - use it
+        assistantText = regeneratedText
+        // Stream the regenerated text to client
+        for (const char of regeneratedText) {
+          send({ type: 'text', text: char })
+        }
+      }
+    } catch (e) {
+      console.error('Regeneration failed, refusing output:', e)
+      resolution = 'refused'
+    }
+
+    // Log the violation
+    await logViolation({
+      ruleViolated: hardViolations[0].ruleViolated,
+      severity: 'hard',
+      proposedOutput: assistantText,
+      triggerContext: validatorContext,
+      resolution,
+      finalOutput: resolution === 'regenerated' ? regeneratedText : undefined,
+      recipientContext: context_override,
+      mode
+    })
+
+    if (resolution === 'refused') {
+      // Send violation notification to client
+      send({
+        type: 'violation',
+        violation: {
+          rule: hardViolations[0].ruleViolated,
+          severity: 'hard',
+          reason: hardViolations[0].reason
+        }
+      })
+
+      // Do not save the violating output
+      send({ type: 'done' })
+      res.end()
+      return
+    }
+  }
+
+  // Log soft violations (for monitoring)
+  const softViolations = validationResults.filter((r) => !r.passed && r.severity === 'soft')
+  if (softViolations.length > 0) {
+    await logViolation({
+      ruleViolated: softViolations[0].ruleViolated,
+      severity: 'soft',
+      proposedOutput: assistantText,
+      triggerContext: validatorContext,
+      resolution: 'sent_after_override',
+      finalOutput: assistantText,
+      recipientContext: context_override,
+      mode
+    })
+  }
+
+  // Second-pass review for sensitive outputs
+  const secondPassResult = await secondPassReview(assistantText, validatorContext)
+  if (!secondPassResult.approved) {
+    await logViolation({
+      ruleViolated: 'second_pass_review',
+      severity: 'hard',
+      proposedOutput: assistantText,
+      triggerContext: validatorContext,
+      resolution: 'refused',
+      recipientContext: context_override,
+      mode
+    })
+
+    send({
+      type: 'violation',
+      violation: {
+        rule: 'second_pass_review',
+        severity: 'hard',
+        reason: secondPassResult.reason || 'Second-pass review failed'
+      }
+    })
+
+    send({ type: 'done' })
     res.end()
     return
   }
@@ -277,7 +399,7 @@ chatRouter.post('/demoforge', async (req, res) => {
     behavioral_confidence: crucibleState?.confidence,
   }
 
-  const systemPrompt = buildSystemPrompt({
+  const systemPrompt = await buildSystemPrompt({
     identity,
     mode: 'ambassador',
     modeConfig,
@@ -285,12 +407,12 @@ chatRouter.post('/demoforge', async (req, res) => {
     demoForgeContext,
   })
 
-  const messages: Anthropic.MessageParam[] = [
+  const messages = [
     ...((conversation_history ?? []).map((t) => ({
-      role: t.role,
+      role: t.role as 'user' | 'assistant',
       content: t.content,
-    })) as Anthropic.MessageParam[]),
-    { role: 'user', content: user_message },
+    }))),
+    { role: 'user' as const, content: user_message },
   ]
 
   res.setHeader('Content-Type', 'text/event-stream; charset=utf-8')
@@ -306,13 +428,14 @@ chatRouter.post('/demoforge', async (req, res) => {
 
   let assistantText = ''
   try {
-    const stream = anthropic.messages.stream({
+    const stream = await anthropicMessagesCreate({
       model: env.ANTHROPIC_MODEL,
       max_tokens: 8192,
       system: systemPrompt,
       messages,
+      stream: true,
     })
-    stream.on('text', (textDelta) => {
+    stream.on('text', (textDelta: string) => {
       send({ type: 'text', text: textDelta })
     })
     assistantText = await stream.finalText()
