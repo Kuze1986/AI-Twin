@@ -192,9 +192,10 @@ chatRouter.post('/', requireUserAuth, async (req, res) => {
       stream: true,
     })
     for await (const event of stream) {
-      if (event.type === 'text_delta') {
-        assistantText += event.delta.text
-        send({ type: 'text', text: event.delta.text })
+      if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
+        const text = event.delta.text
+        assistantText += text
+        send({ type: 'text', text })
       }
     }
   } catch (e: unknown) {
@@ -438,9 +439,10 @@ chatRouter.post('/demoforge', async (req, res) => {
       stream: true,
     })
     for await (const event of stream) {
-      if (event.type === 'text_delta') {
-        assistantText += event.delta.text
-        send({ type: 'text', text: event.delta.text })
+      if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
+        const text = event.delta.text
+        assistantText += text
+        send({ type: 'text', text })
       }
     }
   } catch (e: unknown) {
