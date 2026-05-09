@@ -191,10 +191,12 @@ chatRouter.post('/', requireUserAuth, async (req, res) => {
       messages,
       stream: true,
     })
-    stream.on('text', (textDelta: string) => {
-      send({ type: 'text', text: textDelta })
-    })
-    assistantText = await stream.finalText()
+    for await (const event of stream) {
+      if (event.type === 'text_delta') {
+        assistantText += event.delta.text
+        send({ type: 'text', text: event.delta.text })
+      }
+    }
   } catch (e: unknown) {
     const err = e as Error & { status?: number }
     const message = err.message ?? 'AI request failed'
@@ -435,10 +437,12 @@ chatRouter.post('/demoforge', async (req, res) => {
       messages,
       stream: true,
     })
-    stream.on('text', (textDelta: string) => {
-      send({ type: 'text', text: textDelta })
-    })
-    assistantText = await stream.finalText()
+    for await (const event of stream) {
+      if (event.type === 'text_delta') {
+        assistantText += event.delta.text
+        send({ type: 'text', text: event.delta.text })
+      }
+    }
   } catch (e: unknown) {
     const err = e as Error & { status?: number }
     const message = err.message ?? 'Claude request failed'
