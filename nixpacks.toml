@@ -11,3 +11,7 @@ NPM_CONFIG_PRODUCTION = "false"
 [phases.install]
 # Be explicit: Railway must install workspace dev deps for client build tools (tsc/vite).
 cmds = ["npm ci --include=dev"]
+
+[phases.build]
+# Build both client and server before starting
+cmds = ["npm run build"]
