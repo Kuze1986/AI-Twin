@@ -1,6 +1,6 @@
 /** Server-side types for AI Twin. */
 
-export type ChatMode = 'default' | 'sales' | 'ops' | 'outreach' | 'debrief' | 'ambassador'
+export type ChatMode = 'default' | 'sales' | 'ops' | 'outreach' | 'debrief'
 
 export interface DemoForgeContext {
   tenant_id: string
@@ -13,7 +13,7 @@ export interface DemoForgeContext {
   behavioral_confidence?: number
 }
 
-export type MemoryCategory = 'relationship' | 'preference' | 'decision' | 'fact' | 'context'
+export type MemoryCategory = 'relationship' | 'preference' | 'decision' | 'fact' | 'context' | 'ai_peer'
 
 export interface ContextBlock {
   id: string

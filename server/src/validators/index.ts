@@ -27,6 +27,7 @@ export async function validatePricing(
 ): Promise<ValidationResult> {
   // Load approved pricing from database
   const { data: approvedPricing, error } = await supabase
+    .schema('kuze')
     .from('approved_pricing')
     .select('product, tier, price_amount, price_unit')
     .eq('is_active', true)
@@ -84,6 +85,7 @@ export async function validateCompetitor(
 ): Promise<ValidationResult> {
   // Load competitor list from database
   const { data: competitors, error } = await supabase
+    .schema('kuze')
     .from('competitor_list')
     .select('name')
     .eq('active', true)
@@ -210,7 +212,7 @@ export async function logViolation(args: {
   recipientContext?: string
   mode: string
 }): Promise<void> {
-  const { error } = await supabase.from('violation_log').insert({
+  const { error } = await supabase.schema('kuze').from('violation_log').insert({
     rule_violated: args.ruleViolated,
     severity: args.severity,
     proposed_output: args.proposedOutput,
@@ -252,8 +254,8 @@ Respond naturally as if this was your first attempt.
       stream: false
     })
 
-    const result = await stream.finalText()
-    return result
+    const msg = stream as { content: Array<{ type: string; text?: string }> }
+    return msg.content.find((b) => b.type === 'text')?.text ?? ''
   } catch (e) {
     console.error('Regeneration failed:', e)
     throw e
@@ -292,18 +294,36 @@ export async function secondPassReview(output: string, context: ValidatorContext
   approved: boolean
   reason?: string
 }> {
-  // For now, second-pass review is a placeholder
-  // In a full implementation, this would:
-  // 1. Send the output to Ilita for value alignment check
-  // 2. Check against additional safety rules
-  // 3. Require human approval for certain categories
-
-  if (requiresSecondPassReview(output, context)) {
-    // Log that sensitive content was generated
-    console.log('Sensitive content detected - would require human review in production')
-    // For now, approve but log
-    return { approved: true, reason: 'Sensitive content - logged for review' }
+  if (!requiresSecondPassReview(output, context)) {
+    return { approved: true }
   }
 
-  return { approved: true }
+  // If Ilita API credentials are configured, delegate to Ilita for value alignment
+  const ilitaUrl = process.env.ILITA_API_URL
+  const ilitaKey = process.env.ILITA_API_KEY
+  if (ilitaUrl && ilitaKey) {
+    try {
+      const resp = await fetch(`${ilitaUrl.replace(/\/+$/, '')}/api/peer/review`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Peer-Name': 'kuze',
+          'X-Peer-Key': ilitaKey,
+        },
+        body: JSON.stringify({ output, context }),
+        signal: AbortSignal.timeout(5000),
+      })
+      if (resp.ok) {
+        const result = await resp.json() as { approved: boolean; reason?: string }
+        return result
+      }
+      console.error('[secondPassReview] Ilita returned status', resp.status, '— failing open')
+    } catch (e) {
+      console.error('[secondPassReview] Ilita unreachable:', (e as Error).message, '— failing open')
+    }
+  }
+
+  // Ilita not configured or unreachable — log sensitive content and approve
+  console.log('[secondPassReview] Sensitive content detected - logged for review (Ilita not configured)')
+  return { approved: true, reason: 'Sensitive content - logged for review' }
 }

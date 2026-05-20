@@ -226,7 +226,7 @@ adminRouter.get('/long-term-memory', requireAdmin, async (_req, res) => {
 })
 
 const ltmPost = z.object({
-  category: z.enum(['relationship', 'preference', 'decision', 'fact', 'context']),
+  category: z.enum(['relationship', 'preference', 'decision', 'fact', 'context', 'ai_peer']),
   summary: z.string().min(1),
   weight: z.number().min(0).max(1).optional(),
 })
@@ -256,7 +256,7 @@ adminRouter.post('/long-term-memory', requireAdmin, async (req, res) => {
 const ltmPut = z.object({
   summary: z.string().min(1),
   weight: z.number().min(0).max(1),
-  category: z.enum(['relationship', 'preference', 'decision', 'fact', 'context']),
+  category: z.enum(['relationship', 'preference', 'decision', 'fact', 'context', 'ai_peer']),
 })
 
 adminRouter.put('/long-term-memory/:id', requireAdmin, async (req, res) => {
@@ -406,6 +406,96 @@ Writing samples:\n\n${corpus.slice(0, 200_000)}`
 
 const applyFp = z.object({
   style_fingerprint: z.record(z.string(), z.unknown()),
+})
+
+// ── Sentinel read-only dashboard ─────────────────────────────────────────────
+
+adminRouter.get('/sentinel/violations', requireAdmin, async (req, res) => {
+  const limitRaw = Number.parseInt(String(req.query.limit ?? ''), 10)
+  const offsetRaw = Number.parseInt(String(req.query.offset ?? ''), 10)
+  const limit = Number.isFinite(limitRaw) ? Math.min(Math.max(limitRaw, 1), 200) : 25
+  const offset = Number.isFinite(offsetRaw) && offsetRaw > 0 ? offsetRaw : 0
+  const severity = typeof req.query.severity === 'string' && req.query.severity ? req.query.severity : null
+
+  let query = supabaseAdmin
+    .schema('kuze')
+    .from('violation_log')
+    .select('*', { count: 'exact' })
+    .order('occurred_at', { ascending: false })
+    .range(offset, offset + limit - 1)
+
+  if (severity) {
+    query = query.eq('severity', severity) as typeof query
+  }
+
+  const { data, error, count } = await query
+  if (error) {
+    res.status(500).json({ error: { code: 'db_error', message: error.message } })
+    return
+  }
+  res.json({ items: data ?? [], total: count ?? 0, limit, offset })
+})
+
+adminRouter.get('/sentinel/patterns', requireAdmin, async (req, res) => {
+  const limitRaw = Number.parseInt(String(req.query.limit ?? ''), 10)
+  const offsetRaw = Number.parseInt(String(req.query.offset ?? ''), 10)
+  const limit = Number.isFinite(limitRaw) ? Math.min(Math.max(limitRaw, 1), 200) : 25
+  const offset = Number.isFinite(offsetRaw) && offsetRaw > 0 ? offsetRaw : 0
+
+  const { data, error, count } = await supabaseAdmin
+    .schema('kuze')
+    .from('pattern_alerts')
+    .select('*', { count: 'exact' })
+    .order('created_at', { ascending: false })
+    .range(offset, offset + limit - 1)
+
+  if (error) {
+    res.status(500).json({ error: { code: 'db_error', message: error.message } })
+    return
+  }
+  res.json({ items: data ?? [], total: count ?? 0, limit, offset })
+})
+
+adminRouter.get('/sentinel/pattern-count', requireAdmin, async (_req, res) => {
+  const { count, error } = await supabaseAdmin
+    .schema('kuze')
+    .from('pattern_alerts')
+    .select('*', { count: 'exact', head: true })
+    .eq('status', 'open')
+
+  if (error) {
+    res.json({ count: 0 })
+    return
+  }
+  res.json({ count: count ?? 0 })
+})
+
+// ── AI Peers read-only dashboard ──────────────────────────────────────────────
+
+adminRouter.get('/peers/interactions', requireAdmin, async (req, res) => {
+  const limitRaw = Number.parseInt(String(req.query.limit ?? ''), 10)
+  const offsetRaw = Number.parseInt(String(req.query.offset ?? ''), 10)
+  const limit = Number.isFinite(limitRaw) ? Math.min(Math.max(limitRaw, 1), 200) : 25
+  const offset = Number.isFinite(offsetRaw) && offsetRaw > 0 ? offsetRaw : 0
+  const peer = typeof req.query.peer === 'string' && req.query.peer ? req.query.peer : null
+
+  let query = supabaseAdmin
+    .schema('kuze')
+    .from('ai_peer_interactions')
+    .select('*', { count: 'exact' })
+    .order('created_at', { ascending: false })
+    .range(offset, offset + limit - 1)
+
+  if (peer) {
+    query = query.eq('peer_name', peer) as typeof query
+  }
+
+  const { data, error, count } = await query
+  if (error) {
+    res.status(500).json({ error: { code: 'db_error', message: error.message } })
+    return
+  }
+  res.json({ items: data ?? [], total: count ?? 0, limit, offset })
 })
 
 adminRouter.post('/calibrate/apply', requireAdmin, async (req, res) => {

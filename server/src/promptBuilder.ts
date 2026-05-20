@@ -33,6 +33,13 @@ export interface LtmRow {
   created_at: string
 }
 
+export interface PeerMemoryRow {
+  summary: string
+  category: string
+  weight: number
+  created_at: string
+}
+
 export interface OperatingParameterRow {
   section_name: string
   content: unknown
@@ -83,9 +90,32 @@ function formatLtm(rows: LtmRow[]): string {
     .join('\n')
 }
 
+async function loadPeerMemory(): Promise<string> {
+  try {
+    const { data, error } = await supabase
+      .from('long_term_memory_global')
+      .select('summary, category, weight, created_at')
+      .eq('category', 'ai_peer')
+      .order('weight', { ascending: false })
+      .order('created_at', { ascending: false })
+      .limit(5)
+
+    if (error || !data || data.length === 0) return ''
+
+    const lines = (data as PeerMemoryRow[]).map(
+      (r, i) => `${i + 1}. (weight ${r.weight}) ${r.summary}`
+    )
+    return `## AI_PEER_MEMORY (recent interactions with Ilita and Stele)\n${lines.join('\n')}`
+  } catch (e) {
+    console.error('Failed to load peer memory:', e)
+    return ''
+  }
+}
+
 async function loadOperatingParameters(): Promise<string> {
   try {
     const { data: params, error } = await supabase
+      .schema('kuze')
       .from('operating_parameters')
       .select('section_name, content')
       .eq('is_active', true)
@@ -151,6 +181,9 @@ export async function buildSystemPrompt(args: {
   }
 
   parts.push(`## LONG_TERM_MEMORY (top weighted)\n${formatLtm(longTermTop)}`)
+
+  const peerMemory = await loadPeerMemory()
+  if (peerMemory) parts.push(peerMemory)
 
   parts.push(formatStyleFingerprintBlock(identity.style_fingerprint))
 

@@ -9,6 +9,7 @@ import { env } from './env.js'
 import { adminRouter } from './routes/admin.js'
 import { chatRouter } from './routes/chat.js'
 import { publicRouter } from './routes/public.js'
+import { peerRouter } from './routes/peer.js'
 import { sentinelRouter } from './routes/sentinel.js'
 import { sessionsRouter } from './routes/sessions.js'
 
@@ -59,6 +60,7 @@ app.get('/api/health', (_req, res) => {
 })
 app.use('/api/chat', chatRouter)
 app.use('/api/sessions', sessionsRouter)
+app.use('/api/peer', peerRouter)
 app.use('/api/admin', adminRouter)
 app.use('/api/sentinel', sentinelRouter)
 

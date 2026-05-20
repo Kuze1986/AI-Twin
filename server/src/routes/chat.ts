@@ -1,4 +1,5 @@
 import { Router } from 'express'
+import rateLimit from 'express-rate-limit'
 import { z } from 'zod'
 import type { AuthedRequest } from '../authMiddleware.js'
 import { requireUserAuth } from '../authMiddleware.js'
@@ -17,6 +18,15 @@ import {
   secondPassReview,
   type ValidatorContext
 } from '../validators/index.js'
+
+const chatLimiter = rateLimit({
+  windowMs: 60_000,
+  max: Number(process.env.CHAT_RATE_LIMIT_PER_MIN ?? 20),
+  keyGenerator: (req) => (req as AuthedRequest).userId ?? req.ip ?? 'anon',
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: { code: 'rate_limited', message: 'Too many requests — please wait a moment.' } },
+})
 
 const modeEnum = z.enum(['default', 'sales', 'ops', 'outreach', 'debrief'])
 
@@ -65,7 +75,7 @@ function takeRateSlot(
   return true
 }
 
-chatRouter.post('/', requireUserAuth, async (req, res) => {
+chatRouter.post('/', requireUserAuth, chatLimiter, async (req, res) => {
   const parsed = bodySchema.safeParse(req.body)
   if (!parsed.success) {
     res.status(400).json({ error: { code: 'validation', message: parsed.error.message } })
@@ -404,7 +414,7 @@ chatRouter.post('/demoforge', async (req, res) => {
 
   const systemPrompt = await buildSystemPrompt({
     identity,
-    mode: 'ambassador',
+    mode: 'default',
     modeConfig,
     longTermTop: ltm,
     demoForgeContext,

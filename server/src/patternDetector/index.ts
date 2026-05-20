@@ -24,6 +24,7 @@ export async function detectPatterns(timeWindowHours: number = 24): Promise<Patt
   const cutoffTime = new Date(Date.now() - timeWindowHours * 60 * 60 * 1000).toISOString()
 
   const { data: violations, error } = await supabase
+    .schema('kuze')
     .from('violation_log')
     .select('id, rule_violated, severity, occurred_at, resolution')
     .gte('occurred_at', cutoffTime)
@@ -122,7 +123,7 @@ export async function detectPatterns(timeWindowHours: number = 24): Promise<Patt
  * Creates pattern alerts in kuze.pattern_alerts
  */
 export async function createPatternAlert(pattern: PatternDetection): Promise<void> {
-  const { error } = await supabase.from('pattern_alerts').insert({
+  const { error } = await supabase.schema('kuze').from('pattern_alerts').insert({
     pattern_type: pattern.patternType,
     description: pattern.description,
     triggering_violations: pattern.triggeringViolations,
@@ -131,6 +132,25 @@ export async function createPatternAlert(pattern: PatternDetection): Promise<voi
 
   if (error) {
     console.error('Failed to create pattern alert:', error)
+    return
+  }
+
+  const webhookUrl = process.env.SENTINEL_WEBHOOK_URL
+  if (webhookUrl) {
+    fetch(webhookUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        type: 'pattern_alert',
+        pattern_type: pattern.patternType,
+        description: pattern.description,
+        severity: pattern.severity,
+        count: pattern.count,
+        time_window: pattern.timeWindow,
+        triggering_violation_count: pattern.triggeringViolations.length,
+        occurred_at: new Date().toISOString(),
+      }),
+    }).catch((e: unknown) => console.error('[sentinel webhook]', (e as Error).message))
   }
 }
 

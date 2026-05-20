@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { adminFetch } from '../../lib/api'
+import { useToast } from '../../components/Toast'
 
 type SessionRow = {
   id: string
@@ -34,6 +35,7 @@ export function AdminSessionsPage() {
   const [open, setOpen] = useState<string | null>(null)
   const [transcript, setTranscript] = useState<Turn[]>([])
   const [error, setError] = useState<string | null>(null)
+  const { toast } = useToast()
 
   const load = (nextOffset = offset) => {
     adminFetch(`/sessions?limit=${PAGE_SIZE}&offset=${nextOffset}`)
@@ -83,9 +85,9 @@ export function AdminSessionsPage() {
     try {
       await adminFetch(`/sessions/${id}/consolidate`, { method: 'POST', body: '{}' })
       await load()
-      alert('Consolidation job completed.')
+      toast('Consolidation complete.', 'success')
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Consolidation failed')
+      toast(e instanceof Error ? e.message : 'Consolidation failed', 'error')
     }
   }
 
@@ -150,11 +152,27 @@ export function AdminSessionsPage() {
       {open && (
         <div className="fixed inset-0 flex items-center justify-center bg-black/40 p-4">
           <div className="max-h-[90vh] w-full max-w-2xl overflow-auto rounded bg-white p-4 dark:bg-zinc-900">
-            <div className="mb-2 flex justify-between">
+            <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
               <h2 className="font-medium">Transcript</h2>
-              <button type="button" className="text-sm underline" onClick={() => setOpen(null)}>
-                Close
-              </button>
+              <div className="flex gap-2">
+                <a
+                  href={`/api/sessions/${open}/export?format=json`}
+                  download
+                  className="text-xs text-violet-600 underline dark:text-violet-400"
+                >
+                  Export JSON
+                </a>
+                <a
+                  href={`/api/sessions/${open}/export?format=txt`}
+                  download
+                  className="text-xs text-violet-600 underline dark:text-violet-400"
+                >
+                  Export TXT
+                </a>
+                <button type="button" className="text-sm underline" onClick={() => setOpen(null)}>
+                  Close
+                </button>
+              </div>
             </div>
             <div className="space-y-3 text-sm">
               {transcript.map((t) => (

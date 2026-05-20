@@ -1,5 +1,7 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { AuthProvider } from './context/AuthContext'
+import { ErrorBoundary } from './components/ErrorBoundary'
+import { ToastProvider } from './components/Toast'
 import { ChatPage } from './pages/ChatPage'
 import { LoginPage } from './pages/LoginPage'
 import { AdminCalibrationPage } from './pages/admin/AdminCalibrationPage'
@@ -8,12 +10,16 @@ import { AdminLayout } from './pages/admin/AdminLayout'
 import { AdminLoginPage } from './pages/admin/AdminLoginPage'
 import { AdminMemoryPage } from './pages/admin/AdminMemoryPage'
 import { AdminModesPage } from './pages/admin/AdminModesPage'
+import { AdminPeersPage } from './pages/admin/AdminPeersPage'
+import { AdminSentinelPage } from './pages/admin/AdminSentinelPage'
 import { AdminSessionsPage } from './pages/admin/AdminSessionsPage'
 
 export default function App() {
   return (
+    <ErrorBoundary>
     <BrowserRouter>
       <AuthProvider>
+      <ToastProvider>
         <Routes>
           <Route path="/" element={<ChatPage />} />
           <Route path="/login" element={<LoginPage />} />
@@ -25,9 +31,13 @@ export default function App() {
             <Route path="memory" element={<AdminMemoryPage />} />
             <Route path="sessions" element={<AdminSessionsPage />} />
             <Route path="modes" element={<AdminModesPage />} />
+            <Route path="peers" element={<AdminPeersPage />} />
+            <Route path="sentinel" element={<AdminSentinelPage />} />
           </Route>
         </Routes>
+      </ToastProvider>
       </AuthProvider>
     </BrowserRouter>
+    </ErrorBoundary>
   )
 }

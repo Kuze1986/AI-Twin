@@ -26,4 +26,14 @@ export const env = {
   KUZE_INFERENCE_PROVIDER: process.env.KUZE_INFERENCE_PROVIDER ?? 'anthropic',
   KUZE_OPENAI_BASE_URL: process.env.KUZE_OPENAI_BASE_URL,
   KUZE_OPENAI_API_KEY: process.env.KUZE_OPENAI_API_KEY,
+  // Peer AI auth keys — set these to enable API-to-API calls from Ilita/Stele
+  ILITA_PEER_KEY: process.env.ILITA_PEER_KEY ?? '',
+  STELE_PEER_KEY: process.env.STELE_PEER_KEY ?? '',
+  // Ilita API integration — set when Ilita's API details are known
+  ILITA_API_URL: process.env.ILITA_API_URL ?? '',
+  ILITA_API_KEY: process.env.ILITA_API_KEY ?? '',
+  // Sentinel webhook — set to receive pattern alert POSTs (Slack, Discord, n8n, etc.)
+  SENTINEL_WEBHOOK_URL: process.env.SENTINEL_WEBHOOK_URL ?? '',
+  // Chat rate limiting
+  CHAT_RATE_LIMIT_PER_MIN: Number(process.env.CHAT_RATE_LIMIT_PER_MIN ?? 20),
 }
