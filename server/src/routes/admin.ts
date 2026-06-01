@@ -385,7 +385,7 @@ Writing samples:\n\n${corpus.slice(0, 200_000)}`
       system: 'You output only compact JSON objects. No markdown.',
       messages: [{ role: 'user', content: instruction }],
     })
-    const block = msg.content.find((b) => b.type === 'text')
+    const block = msg.content.find((b: { type: string; text?: string }) => b.type === 'text')
     const text = block && block.type === 'text' ? block.text : ''
     let parsedJson: unknown
     try {
