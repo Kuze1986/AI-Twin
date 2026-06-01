@@ -10,7 +10,7 @@ import { buildSystemPrompt } from '../promptBuilder.js'
 import type { ChatMode, DemoForgeContext } from '../types.js'
 import { budgetHistory, type HistoryTurn } from '../tokenBudget.js'
 import { supabaseAdmin } from '../supabaseAdmin.js'
-import { messagesCreate as anthropicMessagesCreate } from '../inference/messagesCreate.js'
+import { messagesCreate as anthropicMessagesCreate, resolveModel } from '../inference/messagesCreate.js'
 import {
   runValidators,
   logViolation,
@@ -195,7 +195,7 @@ chatRouter.post('/', requireUserAuth, chatLimiter, async (req, res) => {
   let assistantText = ''
   try {
     const stream = await anthropicMessagesCreate({
-      model: env.ANTHROPIC_MODEL,
+      tier: 'balanced',
       max_tokens: 8192,
       system: systemPrompt,
       messages,
@@ -337,7 +337,7 @@ chatRouter.post('/', requireUserAuth, chatLimiter, async (req, res) => {
     user_id: userId,
     role: 'assistant',
     content: assistantText,
-    metadata: { mode, model: env.ANTHROPIC_MODEL },
+    metadata: { mode, model: resolveModel('balanced') },
   })
   if (aErr) {
     send({ type: 'error', error: { code: 'db_error', message: aErr.message } })
@@ -442,7 +442,7 @@ chatRouter.post('/demoforge', async (req, res) => {
   let assistantText = ''
   try {
     const stream = await anthropicMessagesCreate({
-      model: env.ANTHROPIC_MODEL,
+      tier: 'balanced',
       max_tokens: 8192,
       system: systemPrompt,
       messages,

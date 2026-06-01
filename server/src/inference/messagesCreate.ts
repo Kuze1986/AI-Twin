@@ -1,6 +1,8 @@
 import { messagesCreate as anthropicMessagesCreate } from './adapters/anthropicSdk.js'
 import { messagesCreate as openAiMessagesCreate } from './adapters/openAiCompatibleHttp.js'
 
+export type ModelTier = 'fast' | 'balanced' | 'powerful'
+
 /**
  * @returns {'anthropic' | 'openai_compatible'}
  */
@@ -12,6 +14,22 @@ function getProviderName(): 'anthropic' | 'openai_compatible' {
   return 'anthropic'
 }
 
+const TIER_ENV: Record<ModelTier, string> = {
+  fast:     'ANTHROPIC_MODEL_FAST',
+  balanced: 'ANTHROPIC_MODEL_BALANCED',
+  powerful: 'ANTHROPIC_MODEL_POWERFUL',
+}
+
+/**
+ * Resolves a tier name ('fast'|'balanced'|'powerful') or explicit model ID to a model string.
+ * Tier env vars take precedence over built-in defaults.
+ */
+export function resolveModel(tierOrModel: ModelTier | string = 'balanced'): string {
+  const envKey = TIER_ENV[tierOrModel as ModelTier]
+  if (envKey) return process.env[envKey] ?? process.env.ANTHROPIC_MODEL ?? 'claude-sonnet-4-6'
+  return tierOrModel
+}
+
 /**
  * Unified entry matching Anthropic `messages.create` contract so all Kuze services
  * keep calling `messages.create(...)`.
@@ -20,20 +38,24 @@ function getProviderName(): 'anthropic' | 'openai_compatible' {
  * - anthropic (default): Anthropic Messages API (@anthropic-ai/sdk).
  * - openai_compatible: POST `${KUZE_OPENAI_BASE_URL}`/chat/completions
  *
- * @param params - { model, max_tokens, system?, messages, stream? }
+ * @param params - Anthropic params + optional `tier` ('fast'|'balanced'|'powerful').
+ *   When `tier` is given it takes precedence over `model`.
  */
 export async function messagesCreate(params: {
-  model: string
+  model?: string
+  tier?: ModelTier | string
   max_tokens: number
   system?: string
   messages: { role: 'user' | 'assistant'; content: string | any[] }[]
   stream?: boolean
 }): Promise<any> {
+  const { tier, ...rest } = params
+  const resolved = { ...rest, model: resolveModel(tier ?? rest.model ?? 'balanced') }
   const backend = getProviderName()
   if (backend === 'openai_compatible') {
-    return openAiMessagesCreate(params)
+    return openAiMessagesCreate(resolved)
   }
-  return anthropicMessagesCreate(params)
+  return anthropicMessagesCreate(resolved)
 }
 
 export { getProviderName }

@@ -1,13 +1,11 @@
-import Anthropic from '@anthropic-ai/sdk'
 import { Router, type NextFunction, type Request, type Response } from 'express'
 import multer from 'multer'
 import { z } from 'zod'
 import { requireAdmin } from '../adminMiddleware.js'
 import { consolidateSession } from '../consolidation.js'
 import { env } from '../env.js'
+import { messagesCreate } from '../inference/messagesCreate.js'
 import { supabaseAdmin } from '../supabaseAdmin.js'
-
-const anthropic = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY })
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } })
 
 export const adminRouter = Router()
@@ -381,8 +379,8 @@ signature_phrases (array of exactly 10 strings).
 Writing samples:\n\n${corpus.slice(0, 200_000)}`
 
   try {
-    const msg = await anthropic.messages.create({
-      model: env.ANTHROPIC_MODEL,
+    const msg = await messagesCreate({
+      tier: 'balanced',
       max_tokens: 4096,
       system: 'You output only compact JSON objects. No markdown.',
       messages: [{ role: 'user', content: instruction }],

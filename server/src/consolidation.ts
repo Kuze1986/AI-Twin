@@ -1,8 +1,6 @@
-import Anthropic from '@anthropic-ai/sdk'
 import { env } from './env.js'
+import { messagesCreate } from './inference/messagesCreate.js'
 import { supabaseAdmin } from './supabaseAdmin.js'
-
-const anthropic = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY })
 
 interface ExtractedMemory {
   category: string
@@ -73,14 +71,13 @@ export async function consolidateSession(sessionId: string): Promise<{ ok: boole
 
   let textOut = ''
   try {
-    const msg = await anthropic.messages.create({
-      model: env.ANTHROPIC_MODEL,
+    const msg = await messagesCreate({
+      tier: 'fast',
       max_tokens: 4096,
-      system:
-        'You output only valid JSON arrays. No prose, no markdown fences.',
+      system: 'You output only valid JSON arrays. No prose, no markdown fences.',
       messages: [{ role: 'user', content: userPrompt }],
     })
-    const block = msg.content.find((b) => b.type === 'text')
+    const block = msg.content.find((b: { type: string }) => b.type === 'text')
     if (block && block.type === 'text') textOut = block.text
   } catch (e: unknown) {
     const err = e as Error
@@ -135,13 +132,13 @@ export async function consolidatePeerExchange(exchangeId: string): Promise<{ ok:
 
   let textOut = ''
   try {
-    const msg = await anthropic.messages.create({
-      model: env.ANTHROPIC_MODEL,
+    const msg = await messagesCreate({
+      tier: 'fast',
       max_tokens: 2048,
       system: 'You output only valid JSON arrays. No prose, no markdown fences.',
       messages: [{ role: 'user', content: userPrompt }],
     })
-    const block = msg.content.find((b) => b.type === 'text')
+    const block = msg.content.find((b: { type: string }) => b.type === 'text')
     if (block && block.type === 'text') textOut = block.text
   } catch (e: unknown) {
     return { ok: false, error: (e as Error).message ?? 'claude_error' }
