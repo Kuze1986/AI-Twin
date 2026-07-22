@@ -252,7 +252,8 @@ Suppressed recipients are skipped at draft time; a refused draft is flagged rath
 ### Phase 2 environment variables
 `EMAIL_AUTOSEND_WARM` · `TASK_WORKER_INTERVAL_MS`
 
-> **Planned:** Phase 3 — natural-language task creation from the chat UI ("reach out to these 20 leads…") and campaign refinements.
+### Natural-language task creation (Phase 3)
+Tasks can also be created straight from the chat UI. When a message reads as a directive ("reach out to these leads…", "follow up with jane@clinic.com about…"), the chat route runs a cheap regex prefilter and then a fast-model classifier (`server/src/tasks/intent.ts`) that extracts the task type, goal, and any recipient emails. A matching directive queues a task (`source: 'chat'`, shared `createTask`) and Kuze replies with a short in-voice confirmation instead of a normal answer; ordinary conversation stays on the fast path untouched. Outreach directives with no usable email address fall through to normal chat so Kuze can ask for addresses. The confirmation is Sentinel-validated like any other output, and — as everywhere — nothing sends without approval in the Inbox.
 
 ---
 

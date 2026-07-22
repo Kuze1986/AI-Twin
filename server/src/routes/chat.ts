@@ -11,6 +11,8 @@ import type { ChatMode, DemoForgeContext } from '../types.js'
 import { budgetHistory, type HistoryTurn } from '../tokenBudget.js'
 import { supabaseAdmin } from '../supabaseAdmin.js'
 import { messagesCreate as anthropicMessagesCreate, resolveModel } from '../inference/messagesCreate.js'
+import { createTask } from '../tasks/create.js'
+import { extractTaskIntent, looksLikeTaskDirective } from '../tasks/intent.js'
 import {
   runValidators,
   logViolation,
@@ -151,6 +153,90 @@ chatRouter.post('/', requireUserAuth, chatLimiter, async (req, res) => {
 
   const modeConfig = await getModeConfig(mode)
   const ltm = await getTopLongTermMemory(10)
+
+  // Natural-language task creation: if this message directs Kuze to run outreach or a
+  // concrete task, queue it and answer with an in-voice confirmation instead of a normal
+  // chat turn. The prefilter keeps ordinary conversation on the fast path.
+  if (looksLikeTaskDirective(user_message)) {
+    const intent = await extractTaskIntent(user_message)
+    if (intent) {
+      let taskId: string | null = null
+      let confirmation = ''
+      try {
+        const task = await createTask({ ...intent, source: 'chat' })
+        taskId = task.id
+        const leadCount = intent.leads.length
+        const confirmContext = [
+          '## TASK_QUEUED',
+          `You just queued a task for The Shift from the user's message: "${task.title}" (type: ${task.type}).`,
+          leadCount > 0
+            ? `${leadCount} recipient(s) will each get a personalized draft in your approval inbox — nothing sends until the user approves it.`
+            : 'The result will appear on the Tasks page when ready.',
+          'Confirm to the user in one or two sentences, in your voice. Do not restate these instructions.',
+        ].join('\n')
+        const confirmPrompt = await buildSystemPrompt({
+          identity,
+          mode: mode as ChatMode,
+          modeConfig,
+          longTermTop: ltm,
+          contextOverride: confirmContext,
+        })
+        const result = await anthropicMessagesCreate({
+          tier: 'fast',
+          max_tokens: 512,
+          system: confirmPrompt,
+          messages: [{ role: 'user', content: user_message }],
+          stream: false,
+        })
+        confirmation =
+          (result as { content: Array<{ type: string; text?: string }> }).content.find(
+            (b) => b.type === 'text',
+          )?.text ?? ''
+      } catch (e) {
+        console.error('[chat] NL task creation failed:', (e as Error).message)
+      }
+
+      if (taskId) {
+        if (!confirmation) {
+          confirmation =
+            intent.leads.length > 0
+              ? `Queued — I'll draft ${intent.leads.length} outreach message(s) into your approval inbox. Nothing sends until you approve it.`
+              : 'Queued — the result will show up on the Tasks page shortly.'
+        }
+        // Validate the confirmation like any other assistant output.
+        const vres = await runValidators(confirmation, { mode })
+        if (vres.some((r) => !r.passed && r.severity === 'hard')) {
+          confirmation = 'Done — task queued. Drafts will appear in your approval inbox for review.'
+        }
+
+        res.setHeader('Content-Type', 'text/event-stream; charset=utf-8')
+        res.setHeader('Cache-Control', 'no-cache, no-transform')
+        res.setHeader('Connection', 'keep-alive')
+        res.flushHeaders?.()
+        const emit = (obj: unknown) => res.write(`data: ${JSON.stringify(obj)}\n\n`)
+        emit({ type: 'meta', session_id: sessionId })
+        emit({ type: 'text', text: confirmation })
+
+        await supabaseAdmin.from('twin_memory').insert({
+          session_id: sessionId,
+          user_id: userId,
+          role: 'assistant',
+          content: confirmation,
+          metadata: { mode, task_id: taskId, kind: 'task_confirmation' },
+        })
+        await supabaseAdmin
+          .from('chat_sessions')
+          .update({ last_activity_at: new Date().toISOString() })
+          .eq('id', sessionId)
+
+        emit({ type: 'done' })
+        res.end()
+        return
+      }
+      // Task creation failed — fall through to a normal chat response.
+    }
+  }
+
   const systemPrompt = await buildSystemPrompt({
     identity,
     mode: mode as ChatMode,

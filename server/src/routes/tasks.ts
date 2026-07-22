@@ -2,18 +2,13 @@ import { Router } from 'express'
 import { z } from 'zod'
 import { requireAdmin } from '../adminMiddleware.js'
 import { supabaseAdmin } from '../supabaseAdmin.js'
+import { createTask, type Lead } from '../tasks/create.js'
 
 export const tasksRouter = Router()
 
 tasksRouter.use(requireAdmin)
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-
-interface Lead {
-  email: string
-  name?: string
-  company?: string
-}
 
 /** Parse a pasted lead list — one per line, "email, name, company" (name/company optional). */
 function parseLeadsText(text: string): Lead[] {
@@ -62,26 +57,12 @@ tasksRouter.post('/', async (req, res) => {
     return
   }
 
-  const { data, error } = await supabaseAdmin
-    .schema('kuze')
-    .from('tasks')
-    .insert({
-      title,
-      type,
-      goal,
-      source: 'admin',
-      status: 'queued',
-      payload: { leads: parsedLeads },
-      scheduled_for: scheduled_for ?? null,
-    })
-    .select('*')
-    .single()
-
-  if (error || !data) {
-    res.status(500).json({ error: { code: 'db_error', message: error?.message ?? 'insert failed' } })
-    return
+  try {
+    const task = await createTask({ title, type, goal, leads: parsedLeads, source: 'admin', scheduledFor: scheduled_for })
+    res.json({ task, lead_count: parsedLeads.length })
+  } catch (e) {
+    res.status(500).json({ error: { code: 'db_error', message: (e as Error).message } })
   }
-  res.json({ task: data, lead_count: parsedLeads.length })
 })
 
 /** GET / — recent tasks. */
