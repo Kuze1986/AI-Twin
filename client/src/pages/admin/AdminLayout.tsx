@@ -9,6 +9,8 @@ const links = [
   { to: '/admin/sessions', label: 'Sessions' },
   { to: '/admin/modes', label: 'Modes' },
   { to: '/admin/peers', label: 'AI Peers' },
+  { to: '/admin/tasks', label: 'Tasks' },
+  { to: '/admin/inbox', label: 'Inbox' },
   { to: '/admin/sentinel', label: 'Sentinel' },
 ] as const
 
@@ -16,6 +18,8 @@ export function AdminLayout() {
   const loc = useLocation()
   const [ok, setOk] = useState<boolean | null>(null)
   const [patternCount, setPatternCount] = useState(0)
+  const [inboxCount, setInboxCount] = useState(0)
+  const [taskCount, setTaskCount] = useState(0)
   const [navOpen, setNavOpen] = useState(false)
 
   useEffect(() => {
@@ -24,6 +28,12 @@ export function AdminLayout() {
         setOk(true)
         adminFetch('/sentinel/pattern-count')
           .then((d) => setPatternCount((d as { count: number }).count ?? 0))
+          .catch(() => {})
+        adminFetch('/email/pending-count')
+          .then((d) => setInboxCount((d as { count: number }).count ?? 0))
+          .catch(() => {})
+        adminFetch('/tasks/active-count')
+          .then((d) => setTaskCount((d as { count: number }).count ?? 0))
           .catch(() => {})
       })
       .catch(() => setOk(false))
@@ -58,6 +68,16 @@ export function AdminLayout() {
           {l.to === '/admin/sentinel' && patternCount > 0 && (
             <span className="rounded-full bg-red-500 px-1.5 py-0.5 text-xs font-medium text-white">
               {patternCount}
+            </span>
+          )}
+          {l.to === '/admin/inbox' && inboxCount > 0 && (
+            <span className="rounded-full bg-violet-600 px-1.5 py-0.5 text-xs font-medium text-white">
+              {inboxCount}
+            </span>
+          )}
+          {l.to === '/admin/tasks' && taskCount > 0 && (
+            <span className="rounded-full bg-sky-600 px-1.5 py-0.5 text-xs font-medium text-white">
+              {taskCount}
             </span>
           )}
         </Link>

@@ -6,6 +6,7 @@ import { ChatPage } from './pages/ChatPage'
 import { LoginPage } from './pages/LoginPage'
 import { AdminCalibrationPage } from './pages/admin/AdminCalibrationPage'
 import { AdminIdentityPage } from './pages/admin/AdminIdentityPage'
+import { AdminInboxPage } from './pages/admin/AdminInboxPage'
 import { AdminLayout } from './pages/admin/AdminLayout'
 import { AdminLoginPage } from './pages/admin/AdminLoginPage'
 import { AdminMemoryPage } from './pages/admin/AdminMemoryPage'
@@ -13,6 +14,7 @@ import { AdminModesPage } from './pages/admin/AdminModesPage'
 import { AdminPeersPage } from './pages/admin/AdminPeersPage'
 import { AdminSentinelPage } from './pages/admin/AdminSentinelPage'
 import { AdminSessionsPage } from './pages/admin/AdminSessionsPage'
+import { AdminTasksPage } from './pages/admin/AdminTasksPage'
 
 export default function App() {
   return (
@@ -32,6 +34,8 @@ export default function App() {
             <Route path="sessions" element={<AdminSessionsPage />} />
             <Route path="modes" element={<AdminModesPage />} />
             <Route path="peers" element={<AdminPeersPage />} />
+            <Route path="tasks" element={<AdminTasksPage />} />
+            <Route path="inbox" element={<AdminInboxPage />} />
             <Route path="sentinel" element={<AdminSentinelPage />} />
           </Route>
         </Routes>

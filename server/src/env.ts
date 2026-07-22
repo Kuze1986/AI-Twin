@@ -39,4 +39,33 @@ export const env = {
   SENTINEL_WEBHOOK_URL: process.env.SENTINEL_WEBHOOK_URL ?? '',
   // Chat rate limiting
   CHAT_RATE_LIMIT_PER_MIN: Number(process.env.CHAT_RATE_LIMIT_PER_MIN ?? 20),
+  // Email channel (kuze@bioloopnexus.com via IONOS IMAP/SMTP). Master switch — the
+  // inbound poller and outbound sender stay dormant until this is 'true' AND creds are set.
+  EMAIL_ENABLED: (process.env.EMAIL_ENABLED ?? 'false').trim().toLowerCase() === 'true',
+  KUZE_EMAIL_ADDRESS: process.env.KUZE_EMAIL_ADDRESS ?? '',
+  KUZE_EMAIL_USER: process.env.KUZE_EMAIL_USER ?? process.env.KUZE_EMAIL_ADDRESS ?? '',
+  KUZE_EMAIL_PASSWORD: process.env.KUZE_EMAIL_PASSWORD ?? '',
+  IONOS_IMAP_HOST: process.env.IONOS_IMAP_HOST ?? 'imap.ionos.com',
+  IONOS_IMAP_PORT: Number(process.env.IONOS_IMAP_PORT ?? 993),
+  IONOS_SMTP_HOST: process.env.IONOS_SMTP_HOST ?? 'smtp.ionos.com',
+  IONOS_SMTP_PORT: Number(process.env.IONOS_SMTP_PORT ?? 587),
+  EMAIL_POLL_INTERVAL_MS: Number(process.env.EMAIL_POLL_INTERVAL_MS ?? 120_000),
+  EMAIL_DAILY_SEND_CAP: Number(process.env.EMAIL_DAILY_SEND_CAP ?? 50),
+  // Hybrid autonomy: auto-send Kuze's replies on warm/known inbound threads. Cold outreach
+  // and campaign drafts always require human approval regardless of this flag.
+  EMAIL_AUTOSEND_WARM: (process.env.EMAIL_AUTOSEND_WARM ?? 'true').trim().toLowerCase() === 'true',
+  // How often the task worker drains the queue.
+  TASK_WORKER_INTERVAL_MS: Number(process.env.TASK_WORKER_INTERVAL_MS ?? 30_000),
+  // Appended to cold outreach (CAN-SPAM: physical address + opt-out line).
+  THE_SHIFT_OUTREACH_FOOTER: process.env.THE_SHIFT_OUTREACH_FOOTER ?? '',
+}
+
+/** True only when the email channel is switched on and all IONOS credentials are present. */
+export function emailConfigured(): boolean {
+  return (
+    env.EMAIL_ENABLED &&
+    env.KUZE_EMAIL_ADDRESS !== '' &&
+    env.KUZE_EMAIL_USER !== '' &&
+    env.KUZE_EMAIL_PASSWORD !== ''
+  )
 }

@@ -5,13 +5,17 @@ import cors from 'cors'
 import express from 'express'
 import session from 'express-session'
 import { sweepStaleSessions } from './consolidation.js'
-import { env } from './env.js'
+import { emailConfigured, env } from './env.js'
+import { pollInbox } from './email/poller.js'
 import { adminRouter } from './routes/admin.js'
 import { chatRouter } from './routes/chat.js'
+import { emailRouter } from './routes/email.js'
 import { publicRouter } from './routes/public.js'
 import { peerRouter } from './routes/peer.js'
 import { sentinelRouter } from './routes/sentinel.js'
 import { sessionsRouter } from './routes/sessions.js'
+import { tasksRouter } from './routes/tasks.js'
+import { runTaskQueue } from './tasks/worker.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -62,6 +66,8 @@ app.use('/api/chat', chatRouter)
 app.use('/api/sessions', sessionsRouter)
 app.use('/api/peer', peerRouter)
 app.use('/api/admin', adminRouter)
+app.use('/api/admin/email', emailRouter)
+app.use('/api/admin/tasks', tasksRouter)
 app.use('/api/sentinel', sentinelRouter)
 
 const clientDist = path.join(__dirname, '../../client/dist')
@@ -81,9 +87,25 @@ setInterval(() => {
   void sweepStaleSessions()
 }, env.CONSOLIDATION_INTERVAL_MS).unref()
 
+if (emailConfigured()) {
+  setInterval(() => {
+    void pollInbox()
+  }, env.EMAIL_POLL_INTERVAL_MS).unref()
+}
+
+setInterval(() => {
+  void runTaskQueue()
+}, env.TASK_WORKER_INTERVAL_MS).unref()
+
 app.listen(env.PORT, () => {
   console.log(`[ai-twin] server listening on ${env.PORT}`)
   console.log('[startup] DemoForge endpoint: POST /api/chat/demoforge')
+
+  if (emailConfigured()) {
+    console.log(`[startup] Email channel ENABLED for ${env.KUZE_EMAIL_ADDRESS} — polling every ${env.EMAIL_POLL_INTERVAL_MS}ms`)
+  } else if (env.EMAIL_ENABLED) {
+    console.warn('[startup] EMAIL_ENABLED=true but IONOS credentials are incomplete — email channel dormant')
+  }
 
   if (env.CRUCIBLE_SIM_BASE_URL) {
     void (async () => {
