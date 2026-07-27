@@ -348,7 +348,30 @@ Non-fatal server feedback (consolidation complete, consolidation failed) surface
 
 ## Inference Provider Switching
 
-The inference layer is abstracted so Kuze can run against either Anthropic's API or any OpenAI-compatible endpoint (Ollama, vLLM, LiteLLM, etc.). The active provider is set via the `KUZE_INFERENCE_PROVIDER` environment variable. Switching providers requires no code changes.
+Kuze activates on **whatever LLM key is present** — no provider is hard-required to boot. Four
+providers are supported: **Anthropic** (`@anthropic-ai/sdk`), **OpenAI** (`openai` SDK),
+**Google Gemini** (`@google/generative-ai`), and any **OpenAI-compatible** HTTP endpoint
+(Ollama, vLLM, LiteLLM, etc.).
+
+### Auto-detection
+`resolveActiveProvider()` honors an explicit `KUZE_INFERENCE_PROVIDER` when that provider's key
+is present; otherwise it auto-detects by priority: Anthropic → OpenAI → Gemini → OpenAI-compatible,
+based on which of `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / `GEMINI_API_KEY` / `KUZE_OPENAI_BASE_URL`
+is set. The active provider is logged at startup.
+
+### No provider configured
+The server still boots (admin and other routes work); chat returns a clear `503 no_llm_provider`
+until a key is set.
+
+### Streaming
+`streamAssistantText()` provides a single provider-agnostic streaming path for the normal chat
+turn; each provider streams natively. Model tiers (`fast`/`balanced`/`powerful`) resolve to the
+active provider's model env vars.
+
+### Tool calling boundary
+The operational tool loop (query_shift/query_stripe/get_aegis_state) is **Anthropic-only** for
+now (`supportsTools()`). On OpenAI/Gemini, Kuze chats normally and the prompt tells him he can't
+pull live data. Cross-provider tool calling is a future extension.
 
 ---
 
@@ -356,9 +379,15 @@ The inference layer is abstracted so Kuze can run against either Anthropic's API
 
 | Variable | Required | Description |
 |---|---|---|
-| `ANTHROPIC_API_KEY` | Yes | Anthropic API key |
-| `ANTHROPIC_MODEL` | No | Model ID (default: claude-sonnet-4-20250514) |
+| `ANTHROPIC_API_KEY` | One provider key required | Anthropic API key (enables tools) |
+| `ANTHROPIC_MODEL` | No | Model ID (default: claude-sonnet-4-6) |
 | `ANTHROPIC_BASE_URL` | No | Override Anthropic API base URL |
+| `OPENAI_API_KEY` | One provider key required | OpenAI API key (native SDK) |
+| `OPENAI_MODEL_FAST/BALANCED/POWERFUL` | No | OpenAI model per tier (defaults gpt-4o-mini/gpt-4o) |
+| `GEMINI_API_KEY` | One provider key required | Google Gemini key (or `GOOGLE_API_KEY`) |
+| `GEMINI_MODEL_FAST/BALANCED/POWERFUL` | No | Gemini model per tier (defaults gemini-2.0-flash) |
+| `KUZE_INFERENCE_PROVIDER` | No | Force a provider; else auto-detected from keys present |
+| `KUZE_OPENAI_BASE_URL` | No | OpenAI-compatible endpoint (Ollama/vLLM/LiteLLM) |
 | `SUPABASE_URL` | Yes | Supabase project URL |
 | `SUPABASE_SERVICE_ROLE_KEY` | Yes | Supabase service role key (server only) |
 | `SESSION_SECRET` | Yes | Secret for admin session cookies |

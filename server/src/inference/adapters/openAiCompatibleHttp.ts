@@ -35,7 +35,70 @@ function anthropicBlocksToOpenAIContent(content: string | { type: string; text?:
   return parts
 }
 
-function toOpenAiMessages(system: string | undefined, anthropicMessages: { role: string; content: string | any[] }[]): { role: string; content: string | any[] }[] {
+export function normalizeOpenAiBase(): string {
+  const base = normalizeBaseUrl(process.env.KUZE_OPENAI_BASE_URL || process.env.OPENAI_BASE_URL)
+  if (!base) {
+    throw new Error('[inference] openai_compatible: set KUZE_OPENAI_BASE_URL (e.g. http://localhost:11434/v1)')
+  }
+  return base
+}
+
+/**
+ * Streaming variant for the OpenAI-compatible endpoint. Yields text deltas. Parses the SSE
+ * `data:` frames from POST /chat/completions with stream:true.
+ */
+export async function* streamText(params: {
+  model: string
+  max_tokens: number
+  system?: string
+  messages: { role: string; content: string | any[] }[]
+}): AsyncGenerator<string> {
+  const url = `${normalizeOpenAiBase()}/chat/completions`
+  const apiKey = process.env.KUZE_OPENAI_API_KEY ?? process.env.OPENAI_API_KEY ?? ''
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  if (apiKey.trim()) headers.Authorization = `Bearer ${apiKey}`
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      model: params.model,
+      messages: toOpenAiMessages(params.system, params.messages),
+      max_tokens: params.max_tokens,
+      stream: true,
+    }),
+  })
+  if (!res.ok || !res.body) {
+    const txt = await res.text().catch(() => '')
+    throw new Error(`[inference] openai_compatible stream HTTP error: ${res.status} ${res.statusText} ${txt}`)
+  }
+
+  const reader = res.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    buffer += decoder.decode(value, { stream: true })
+    let sep: number
+    while ((sep = buffer.indexOf('\n')) >= 0) {
+      const line = buffer.slice(0, sep).trim()
+      buffer = buffer.slice(sep + 1)
+      if (!line.startsWith('data:')) continue
+      const data = line.slice(5).trim()
+      if (data === '[DONE]') return
+      try {
+        const json = JSON.parse(data)
+        const delta = json.choices?.[0]?.delta?.content
+        if (typeof delta === 'string') yield delta
+      } catch {
+        /* ignore keepalive / partial frames */
+      }
+    }
+  }
+}
+
+export function toOpenAiMessages(system: string | undefined, anthropicMessages: { role: string; content: string | any[] }[]): { role: string; content: string | any[] }[] {
   const out: { role: string; content: string | any[] }[] = []
   if (system != null && String(system).trim() !== '') {
     out.push({ role: 'system', content: String(system) })
