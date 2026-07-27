@@ -9,6 +9,7 @@ import { emailConfigured, env } from './env.js'
 import { pollInbox } from './email/poller.js'
 import { adminRouter } from './routes/admin.js'
 import { chatRouter } from './routes/chat.js'
+import { constitutionRouter } from './routes/constitution.js'
 import { emailRouter } from './routes/email.js'
 import { publicRouter } from './routes/public.js'
 import { peerRouter } from './routes/peer.js'
@@ -68,6 +69,7 @@ app.use('/api/chat', chatRouter)
 app.use('/api/sessions', sessionsRouter)
 app.use('/api/peer', peerRouter)
 app.use('/api/admin', adminRouter)
+app.use('/api/admin/constitution', constitutionRouter)
 app.use('/api/admin/email', emailRouter)
 app.use('/api/admin/tasks', tasksRouter)
 app.use('/api/admin/tool-log', toolLogRouter)

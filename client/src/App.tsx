@@ -5,6 +5,7 @@ import { ToastProvider } from './components/Toast'
 import { ChatPage } from './pages/ChatPage'
 import { LoginPage } from './pages/LoginPage'
 import { AdminCalibrationPage } from './pages/admin/AdminCalibrationPage'
+import { AdminConstitutionPage } from './pages/admin/AdminConstitutionPage'
 import { AdminIdentityPage } from './pages/admin/AdminIdentityPage'
 import { AdminInboxPage } from './pages/admin/AdminInboxPage'
 import { AdminLayout } from './pages/admin/AdminLayout'
@@ -30,6 +31,7 @@ export default function App() {
           <Route path="/admin" element={<AdminLayout />}>
             <Route index element={<Navigate to="/admin/identity" replace />} />
             <Route path="identity" element={<AdminIdentityPage />} />
+            <Route path="constitution" element={<AdminConstitutionPage />} />
             <Route path="calibrate" element={<AdminCalibrationPage />} />
             <Route path="memory" element={<AdminMemoryPage />} />
             <Route path="sessions" element={<AdminSessionsPage />} />

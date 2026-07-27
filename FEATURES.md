@@ -132,6 +132,34 @@ When `ILITA_API_URL` and `ILITA_API_KEY` environment variables are set, outputs 
 
 ---
 
+## Constitutional Governance
+
+The Constitution is Kuze's foundational charter — every persona line, mode injection, context
+block, and runtime check sits on top of it. It is the floor Sentinel enforces.
+
+### Foundational layer
+The active constitution is stored in `kuze.constitution` (versioned, one active row) and is
+prepended to the **top of every system prompt**, above the persona, in all modes and on all
+entry points (chat, DemoForge, task confirmations). It is loaded at runtime by
+`promptBuilder.loadConstitution()`.
+
+### Fail-safe
+If the active constitution can't be loaded, the prompt injects an explicit
+`## CONSTITUTION UNAVAILABLE — operate under maximum restraint` directive and logs the failure.
+Kuze never runs ungoverned or silently omits it.
+
+### Versioned + immutable by policy
+Each version is a row; exactly one is active (enforced by a partial unique index). The active
+constitution changes only by deliberate re-ratification — there is no write path from the app.
+V1 is seeded verbatim from `supabase/kuze-constitution-v1.md`.
+
+### Admin view
+`/admin/constitution` renders the active constitution (read-only) with version and ratified
+date, plus collapsible version history. Backed by `GET /api/admin/constitution` and
+`/api/admin/constitution/history`.
+
+---
+
 ## Sentinel Runtime Enforcement
 
 Sentinel is a runtime enforcement layer that validates every assistant output before it is delivered to the user. All Sentinel data lives in the `kuze` schema.
@@ -377,6 +405,7 @@ The inference layer is abstracted so Kuze can run against either Anthropic's API
 | `operating_parameters` | Runtime governance amendments injected into the system prompt |
 | `ai_peer_interactions` | Inbound and outbound messages exchanged with Ilita and Stele |
 | `tool_call_log` | Every operational tool call — input, output, duration, error (Phase 1) |
+| `constitution` | Versioned foundational charter; the active row is prepended to every system prompt |
 
 ---
 
