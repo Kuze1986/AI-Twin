@@ -4,6 +4,7 @@ import { adminFetch } from '../../lib/api'
 
 const links = [
   { to: '/admin/identity', label: 'Identity' },
+  { to: '/admin/constitution', label: 'Constitution' },
   { to: '/admin/calibrate', label: 'Calibration' },
   { to: '/admin/memory', label: 'Memory' },
   { to: '/admin/sessions', label: 'Sessions' },

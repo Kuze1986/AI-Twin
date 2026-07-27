@@ -112,6 +112,29 @@ async function loadPeerMemory(): Promise<string> {
   }
 }
 
+async function loadConstitution(): Promise<string> {
+  try {
+    const { data, error } = await supabase
+      .schema('kuze')
+      .from('constitution')
+      .select('version, body')
+      .eq('is_active', true)
+      .maybeSingle()
+
+    if (error || !data?.body) {
+      // A missing constitution is a governance incident, not a silent omission. Log loudly and
+      // fall back to a maximum-restraint directive rather than running ungoverned.
+      console.error('[promptBuilder] active constitution missing — injecting restraint fallback', error?.message ?? '')
+      return '## CONSTITUTION UNAVAILABLE\nYour foundational constitution could not be loaded. Operate under maximum restraint: take no external action, make no commitments, quote no figures, and tell Brandon the constitution failed to load.'
+    }
+
+    return `## CONSTITUTION V${data.version} (foundational — binding; supersedes every section below)\n${data.body}`
+  } catch (e) {
+    console.error('[promptBuilder] constitution load threw:', (e as Error).message)
+    return '## CONSTITUTION UNAVAILABLE\nYour foundational constitution could not be loaded. Operate under maximum restraint: take no external action, make no commitments, quote no figures, and tell Brandon the constitution failed to load.'
+  }
+}
+
 async function loadOperatingParameters(): Promise<string> {
   try {
     const { data: params, error } = await supabase
@@ -173,6 +196,10 @@ export async function buildSystemPrompt(args: {
   const filtered = filterContextBlocks(blocks, modeConfig?.context_block_tag ?? null)
 
   const parts: string[] = []
+
+  // The constitution is the foundational layer: everything else is built on top of it, so it
+  // goes first, in every mode, unconditionally.
+  parts.push(await loadConstitution())
 
   parts.push(identity.persona_prompt.trim())
 
