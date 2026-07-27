@@ -31,6 +31,15 @@ const MODE_LABEL: Record<ChatMode, string> = {
 
 const ONBOARDED_KEY = 'ai_twin_onboarded_v1'
 
+const TOOL_LABELS: Record<string, string> = {
+  query_shift: 'Checking The Shift data',
+  query_stripe: 'Checking Stripe billing',
+  get_aegis_state: 'Checking AEGIS alerts',
+}
+function toolLabel(tool: string): string {
+  return TOOL_LABELS[tool] ?? `Running ${tool}`
+}
+
 export function ChatPage() {
   const { session, user, signOut } = useAuth()
   const [twinName, setTwinName] = useState<string>('Twin')
@@ -38,6 +47,7 @@ export function ChatPage() {
   const [messages, setMessages] = useState<Msg[]>([])
   const [input, setInput] = useState('')
   const [streaming, setStreaming] = useState(false)
+  const [toolChip, setToolChip] = useState<{ tool: string; state: 'running' | 'done' | 'error' } | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [lastUserMsg, setLastUserMsg] = useState<string | null>(null)
   const [sessionId, setSessionId] = useState<string | null>(() => getStoredSessionId())
@@ -140,6 +150,7 @@ export function ChatPage() {
     const uid = crypto.randomUUID()
     setMessages((m) => [...m, { id: uid, role: 'user', content: userMsg }])
     setStreaming(true)
+    setToolChip(null)
 
     const assistantId = crypto.randomUUID()
     let assistantText = ''
@@ -165,6 +176,10 @@ export function ChatPage() {
               return [...rest, { id: assistantId, role: 'assistant', content: assistantText }]
             })
           }
+          if (ev.type === 'tool_status') {
+            // Keep the chip visible until real text streams; a 'done'/'error' just recolors it.
+            setToolChip({ tool: ev.tool, state: ev.state })
+          }
           if (ev.type === 'done') {
             gotDone = true
           }
@@ -177,6 +192,7 @@ export function ChatPage() {
       setError(e instanceof Error ? e.message : 'Request failed')
     } finally {
       setStreaming(false)
+      setToolChip(null)
       // If stream closed without a done event and we have partial text, mark incomplete
       if (!gotDone && assistantText) {
         setMessages((prev) =>
@@ -429,9 +445,26 @@ export function ChatPage() {
           </div>
         ))}
         {streaming && (
-          <p className="text-xs text-zinc-500" aria-live="polite">
-            Thinking…
-          </p>
+          toolChip ? (
+            <span
+              className={`nx-chip ${
+                toolChip.state === 'error'
+                  ? 'nx-chip--red'
+                  : toolChip.state === 'done'
+                    ? 'nx-chip--green'
+                    : 'nx-chip--cyan'
+              }`}
+              aria-live="polite"
+            >
+              {toolChip.state === 'running' && <i className="nx-pulse" />}
+              {toolLabel(toolChip.tool)}
+              {toolChip.state === 'running' ? '…' : toolChip.state === 'error' ? ' — failed' : ' ✓'}
+            </span>
+          ) : (
+            <p className="text-xs text-zinc-500" aria-live="polite">
+              Thinking…
+            </p>
+          )
         )}
         <div ref={bottomRef} />
       </div>

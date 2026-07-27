@@ -58,6 +58,23 @@ export const env = {
   TASK_WORKER_INTERVAL_MS: Number(process.env.TASK_WORKER_INTERVAL_MS ?? 30_000),
   // Appended to cold outreach (CAN-SPAM: physical address + opt-out line).
   THE_SHIFT_OUTREACH_FOOTER: process.env.THE_SHIFT_OUTREACH_FOOTER ?? '',
+  // Operational tool layer (Phase 1). Kuze gets live read-only access to The Shift's data
+  // and Stripe billing. All empty by default — tools then report an explicit "not configured"
+  // error rather than fabricating numbers, and the server still boots without them.
+  // Postgres connection string for the `kuze_readonly` role (SELECT-only on the shift schema).
+  // Never the service-role Supabase key.
+  SHIFT_READONLY_DATABASE_URL: process.env.SHIFT_READONLY_DATABASE_URL ?? '',
+  // Stripe restricted key — read-only scopes only (Charges, Customers, Subscriptions, Invoices,
+  // Disputes, Balance). Do not use the full secret key.
+  STRIPE_RESTRICTED_KEY: process.env.STRIPE_RESTRICTED_KEY ?? '',
+  // Max provider round-trips in the tool-execution loop before forcing a final answer.
+  KUZE_MAX_TOOL_ITERATIONS: Number(process.env.KUZE_MAX_TOOL_ITERATIONS ?? 5),
+  // In-memory cache TTL for Stripe tool results (op+params keyed).
+  KUZE_STRIPE_CACHE_TTL_MS: Number(process.env.KUZE_STRIPE_CACHE_TTL_MS ?? 60_000),
+  // Escape hatch: enables the freeform_select shift query (single SELECT, LIMIT-wrapped,
+  // readonly role, 5s timeout). Ship off.
+  KUZE_ALLOW_FREEFORM_SHIFT_SQL:
+    (process.env.KUZE_ALLOW_FREEFORM_SHIFT_SQL ?? 'false').trim().toLowerCase() === 'true',
 }
 
 /** True only when the email channel is switched on and all IONOS credentials are present. */
@@ -68,4 +85,14 @@ export function emailConfigured(): boolean {
     env.KUZE_EMAIL_USER !== '' &&
     env.KUZE_EMAIL_PASSWORD !== ''
   )
+}
+
+/** True when the shift read-only Postgres connection is configured for query_shift. */
+export function shiftDbConfigured(): boolean {
+  return env.SHIFT_READONLY_DATABASE_URL !== ''
+}
+
+/** True when a Stripe restricted key is present for query_stripe. */
+export function stripeConfigured(): boolean {
+  return env.STRIPE_RESTRICTED_KEY !== ''
 }

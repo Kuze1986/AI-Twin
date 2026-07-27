@@ -10,7 +10,9 @@ import { buildSystemPrompt } from '../promptBuilder.js'
 import type { ChatMode, DemoForgeContext } from '../types.js'
 import { budgetHistory, type HistoryTurn } from '../tokenBudget.js'
 import { supabaseAdmin } from '../supabaseAdmin.js'
-import { messagesCreate as anthropicMessagesCreate, resolveModel } from '../inference/messagesCreate.js'
+import { messagesCreate as anthropicMessagesCreate, resolveModel, supportsTools } from '../inference/messagesCreate.js'
+import { runToolLoop } from '../inference/runToolLoop.js'
+import { getToolsForMode } from '../tools/registry.js'
 import { createTask } from '../tasks/create.js'
 import { extractTaskIntent, looksLikeTaskDirective } from '../tasks/intent.js'
 import {
@@ -237,12 +239,18 @@ chatRouter.post('/', requireUserAuth, chatLimiter, async (req, res) => {
     }
   }
 
+  // Operational tools available for this mode (Anthropic provider only — the loop is gated
+  // on supportsTools()). When none are available, the persona prompt says so instead.
+  const tools = supportsTools() ? getToolsForMode(mode) : []
+  const toolsEnabled = tools.length > 0
+
   const systemPrompt = await buildSystemPrompt({
     identity,
     mode: mode as ChatMode,
     modeConfig,
     longTermTop: ltm,
     contextOverride: context_override,
+    toolsEnabled,
   })
 
   const { data: memRows, error: mErr } = await supabaseAdmin
@@ -280,18 +288,33 @@ chatRouter.post('/', requireUserAuth, chatLimiter, async (req, res) => {
 
   let assistantText = ''
   try {
-    const stream = await anthropicMessagesCreate({
-      tier: 'balanced',
-      max_tokens: 8192,
-      system: systemPrompt,
-      messages,
-      stream: true,
-    })
-    for await (const event of stream) {
-      if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
-        const text = event.delta.text
-        assistantText += text
-        send({ type: 'text', text })
+    if (toolsEnabled) {
+      // Tool-execution loop: streams text live and runs any tools the model requests, emitting
+      // a tool_status SSE event per call so the UI can show a status chip. The final text still
+      // flows through the Sentinel validator chain below, unchanged.
+      assistantText = await runToolLoop({
+        system: systemPrompt,
+        messages,
+        tools,
+        ctx: { userId, sessionId, mode },
+        maxIterations: env.KUZE_MAX_TOOL_ITERATIONS,
+        onText: (text) => send({ type: 'text', text }),
+        onToolEvent: (tool, state) => send({ type: 'tool_status', tool, state }),
+      })
+    } else {
+      const stream = await anthropicMessagesCreate({
+        tier: 'balanced',
+        max_tokens: 8192,
+        system: systemPrompt,
+        messages,
+        stream: true,
+      })
+      for await (const event of stream) {
+        if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
+          const text = event.delta.text
+          assistantText += text
+          send({ type: 'text', text })
+        }
       }
     }
   } catch (e: unknown) {

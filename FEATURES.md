@@ -376,3 +376,58 @@ The inference layer is abstracted so Kuze can run against either Anthropic's API
 | `competitor_list` | Watchlist of competitor names for the competitor validator |
 | `operating_parameters` | Runtime governance amendments injected into the system prompt |
 | `ai_peer_interactions` | Inbound and outbound messages exchanged with Ilita and Stele |
+| `tool_call_log` | Every operational tool call — input, output, duration, error (Phase 1) |
+
+---
+
+## Operational Tool Layer (Phase 1)
+
+Turns Kuze from a persona chat into a read-only operational co-pilot for The Shift. He calls
+live tools instead of estimating numbers, and every call is logged. Read-only against all
+product data — the only thing the layer writes is `kuze.tool_call_log`.
+
+### Tool-execution loop
+On the Anthropic provider, chat turns run through a streaming tool loop (`inference/runToolLoop.ts`):
+the model can request tools mid-answer, the results are fed back, and the loop continues up to
+`KUZE_MAX_TOOL_ITERATIONS` round-trips before a final streamed answer. The final text still passes
+through the full Sentinel validator chain unchanged. The OpenAI-compatible provider has no tool
+support, so it runs tool-less and Kuze is told he can't pull live data.
+
+### `query_shift`
+Read-only metrics for The Shift via a named query catalog (`tools/shiftQueries.ts`) — no freeform
+SQL on the default path. Runs under a dedicated `kuze_readonly` Postgres role (`SHIFT_READONLY_DATABASE_URL`),
+never the service-role client, with a 5s statement timeout. Queries: `signups_summary`, `active_users`
+(DAU), `mode_usage`, `vertical_breakdown`, `quest_chain_progress`, `recent_signups`, `queue_health`.
+Aggregates and non-PII fields only — no user emails or names. An off-by-default `freeform_select`
+escape hatch is gated behind `KUZE_ALLOW_FREEFORM_SHIFT_SQL`.
+
+### `query_stripe`
+Read-only billing metrics via a Stripe **restricted** key (`STRIPE_RESTRICTED_KEY`), cached in-memory
+for `KUZE_STRIPE_CACHE_TTL_MS`. Operations: `revenue_summary`, `mrr_snapshot`, `recent_subscriptions`,
+`failed_payments`, `churn`, `disputes`, `balance`. Customer IDs only, no emails.
+
+### `get_aegis_state`
+Placeholder for AEGIS alert state. Returns an explicit "not yet configured" error until Phase 2
+ships the event ingestion table — never a fabricated empty state.
+
+### Tool-call logging
+Every call (input, output truncated to 16KB, ok/error, duration, mode, session) is written to
+`kuze.tool_call_log` before the result is used. Failures surface to the model as explicit errors
+and to the user in Kuze's answer — no silent failures, no fabricated numbers.
+
+### In-chat status chips
+While a tool runs, the chat streams a `tool_status` SSE event and the UI shows a small HUD chip
+("Checking The Shift data…") using the NEXUS design system, recoloured on success/failure.
+
+### Tool Log admin page
+`/admin/tool-log` lists recent tool calls with tool/result filters and expandable input/output.
+The Admin nav shows a red badge counting failed calls in the last 24h.
+
+### New environment variables
+| Variable | Required | Notes |
+|---|---|---|
+| `SHIFT_READONLY_DATABASE_URL` | For `query_shift` | `kuze_readonly` role connection string (SELECT on `shift` only) |
+| `STRIPE_RESTRICTED_KEY` | For `query_stripe` | Read-only restricted key |
+| `KUZE_MAX_TOOL_ITERATIONS` | No | Max tool round-trips per turn (default: 5) |
+| `KUZE_STRIPE_CACHE_TTL_MS` | No | Stripe result cache TTL (default: 60000) |
+| `KUZE_ALLOW_FREEFORM_SHIFT_SQL` | No | Enables `freeform_select` (default: false) |

@@ -48,14 +48,24 @@ export async function messagesCreate(params: {
   system?: string
   messages: { role: 'user' | 'assistant'; content: string | any[] }[]
   stream?: boolean
+  tools?: any[]
+  tool_choice?: any
 }): Promise<any> {
   const { tier, ...rest } = params
   const resolved = { ...rest, model: resolveModel(tier ?? rest.model ?? 'balanced') }
   const backend = getProviderName()
   if (backend === 'openai_compatible') {
-    return openAiMessagesCreate(resolved)
+    // The OpenAI-compatible adapter is text-only (no tool calling / no streaming). Drop any
+    // tool params so it degrades gracefully; the tool loop is gated on supportsTools() upstream.
+    const { tools: _t, tool_choice: _tc, stream: _s, ...textOnly } = resolved
+    return openAiMessagesCreate(textOnly)
   }
   return anthropicMessagesCreate(resolved)
+}
+
+/** True when the active inference provider supports native tool calling (Anthropic only today). */
+export function supportsTools(): boolean {
+  return getProviderName() === 'anthropic'
 }
 
 export { getProviderName }

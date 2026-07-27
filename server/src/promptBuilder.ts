@@ -148,6 +148,17 @@ async function loadOperatingParameters(): Promise<string> {
  * 7. optional context_override (last among static blocks)
  * 8. operating parameters (dynamic, loaded at runtime)
  */
+const OPERATIONAL_TOOLS_BLOCK = `## OPERATIONAL TOOLS
+You have live read-only access to The Shift's database, Stripe billing, and AEGIS
+alert history. When asked about metrics, revenue, users, or system health: use the
+tools. Never estimate or recall numbers when a tool can answer. If a tool fails,
+say exactly what failed. Cite the time window for any number you report.`
+
+const NO_TOOLS_BLOCK = `## LIVE DATA ACCESS
+You do not currently have access to live operational data (metrics, revenue, alerts).
+If asked for specific current numbers, say plainly that you can't pull live data right
+now — do not estimate, guess, or recall figures as if they were current.`
+
 export async function buildSystemPrompt(args: {
   identity: IdentityRow
   mode: ChatMode
@@ -155,6 +166,7 @@ export async function buildSystemPrompt(args: {
   longTermTop: LtmRow[]
   demoForgeContext?: DemoForgeContext | null
   contextOverride?: string
+  toolsEnabled?: boolean
 }): Promise<string> {
   const { identity, modeConfig, longTermTop, demoForgeContext, contextOverride } = args
   const blocks = asBlocks(identity.context_blocks)
@@ -181,6 +193,10 @@ export async function buildSystemPrompt(args: {
   }
 
   parts.push(`## LONG_TERM_MEMORY (top weighted)\n${formatLtm(longTermTop)}`)
+
+  // Operational tool access (Phase 1). Only injected when the tool loop is actually available
+  // for this turn; otherwise the model is told explicitly it can't pull live numbers.
+  parts.push(args.toolsEnabled ? OPERATIONAL_TOOLS_BLOCK : NO_TOOLS_BLOCK)
 
   const peerMemory = await loadPeerMemory()
   if (peerMemory) parts.push(peerMemory)

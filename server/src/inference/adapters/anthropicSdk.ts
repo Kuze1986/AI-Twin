@@ -21,6 +21,8 @@ export async function messagesCreate(params: {
   system?: string
   messages: Anthropic.MessageParam[]
   stream?: boolean
+  tools?: any[]
+  tool_choice?: any
 }): Promise<any> {
-  return getClient().messages.create(params)
+  return getClient().messages.create(params as Anthropic.MessageCreateParams)
 }

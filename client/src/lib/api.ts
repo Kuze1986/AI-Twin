@@ -40,6 +40,7 @@ export async function adminLogout() {
 export type StreamEvent =
   | { type: 'meta'; session_id: string }
   | { type: 'text'; text: string }
+  | { type: 'tool_status'; tool: string; state: 'running' | 'done' | 'error' }
   | { type: 'error'; error: { code: string; message: string } }
   | { type: 'done' }
 

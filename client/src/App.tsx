@@ -15,6 +15,7 @@ import { AdminPeersPage } from './pages/admin/AdminPeersPage'
 import { AdminSentinelPage } from './pages/admin/AdminSentinelPage'
 import { AdminSessionsPage } from './pages/admin/AdminSessionsPage'
 import { AdminTasksPage } from './pages/admin/AdminTasksPage'
+import { AdminToolLogPage } from './pages/admin/AdminToolLogPage'
 
 export default function App() {
   return (
@@ -36,6 +37,7 @@ export default function App() {
             <Route path="peers" element={<AdminPeersPage />} />
             <Route path="tasks" element={<AdminTasksPage />} />
             <Route path="inbox" element={<AdminInboxPage />} />
+            <Route path="tool-log" element={<AdminToolLogPage />} />
             <Route path="sentinel" element={<AdminSentinelPage />} />
           </Route>
         </Routes>

@@ -11,6 +11,7 @@ const links = [
   { to: '/admin/peers', label: 'AI Peers' },
   { to: '/admin/tasks', label: 'Tasks' },
   { to: '/admin/inbox', label: 'Inbox' },
+  { to: '/admin/tool-log', label: 'Tool Log' },
   { to: '/admin/sentinel', label: 'Sentinel' },
 ] as const
 
@@ -20,6 +21,7 @@ export function AdminLayout() {
   const [patternCount, setPatternCount] = useState(0)
   const [inboxCount, setInboxCount] = useState(0)
   const [taskCount, setTaskCount] = useState(0)
+  const [toolLogCount, setToolLogCount] = useState(0)
   const [navOpen, setNavOpen] = useState(false)
 
   useEffect(() => {
@@ -34,6 +36,9 @@ export function AdminLayout() {
           .catch(() => {})
         adminFetch('/tasks/active-count')
           .then((d) => setTaskCount((d as { count: number }).count ?? 0))
+          .catch(() => {})
+        adminFetch('/tool-log/error-count')
+          .then((d) => setToolLogCount((d as { count: number }).count ?? 0))
           .catch(() => {})
       })
       .catch(() => setOk(false))
@@ -78,6 +83,11 @@ export function AdminLayout() {
           {l.to === '/admin/tasks' && taskCount > 0 && (
             <span className="rounded-full bg-sky-600 px-1.5 py-0.5 text-xs font-medium text-white">
               {taskCount}
+            </span>
+          )}
+          {l.to === '/admin/tool-log' && toolLogCount > 0 && (
+            <span className="rounded-full bg-red-500 px-1.5 py-0.5 text-xs font-medium text-white">
+              {toolLogCount}
             </span>
           )}
         </Link>

@@ -15,7 +15,9 @@ import { peerRouter } from './routes/peer.js'
 import { sentinelRouter } from './routes/sentinel.js'
 import { sessionsRouter } from './routes/sessions.js'
 import { tasksRouter } from './routes/tasks.js'
+import { toolLogRouter } from './routes/toolLog.js'
 import { runTaskQueue } from './tasks/worker.js'
+import { logToolStartup } from './tools/registry.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -68,6 +70,7 @@ app.use('/api/peer', peerRouter)
 app.use('/api/admin', adminRouter)
 app.use('/api/admin/email', emailRouter)
 app.use('/api/admin/tasks', tasksRouter)
+app.use('/api/admin/tool-log', toolLogRouter)
 app.use('/api/sentinel', sentinelRouter)
 
 const clientDist = path.join(__dirname, '../../client/dist')
@@ -100,6 +103,7 @@ setInterval(() => {
 app.listen(env.PORT, () => {
   console.log(`[ai-twin] server listening on ${env.PORT}`)
   console.log('[startup] DemoForge endpoint: POST /api/chat/demoforge')
+  logToolStartup()
 
   if (emailConfigured()) {
     console.log(`[startup] Email channel ENABLED for ${env.KUZE_EMAIL_ADDRESS} — polling every ${env.EMAIL_POLL_INTERVAL_MS}ms`)
