@@ -1,12 +1,84 @@
+@import './nexus.css';
 @import 'tailwindcss';
 
-@layer base {
-  html {
-    @apply antialiased text-zinc-800 bg-zinc-50;
-  }
-  @media (prefers-color-scheme: dark) {
-    html {
-      @apply text-zinc-100 bg-zinc-950;
-    }
-  }
+/*
+  AI-Twin is a dark-only NEXUS HUD surface.
+  Remap Tailwind zinc / violet / white so existing utility classes read as NEXUS tokens
+  when html has class "dark". Accent stays cyan (not purple).
+*/
+@theme {
+  --color-zinc-50: #e8f2fa;
+  --color-zinc-100: #c8dcf0;
+  --color-zinc-200: #a4b8cc;
+  --color-zinc-300: #8ba4bc;
+  --color-zinc-400: #6a849c;
+  --color-zinc-500: #4a6880;
+  --color-zinc-600: #1b3450;
+  --color-zinc-700: #13263a;
+  --color-zinc-800: #0d1e30;
+  --color-zinc-900: #091625;
+  --color-zinc-950: #050c14;
+
+  --color-violet-50: #041820;
+  --color-violet-100: #062430;
+  --color-violet-200: #0a3848;
+  --color-violet-300: #0e5068;
+  --color-violet-400: #00a8c8;
+  --color-violet-500: #00c4e8;
+  --color-violet-600: #00c4e8;
+  --color-violet-700: #00a8c8;
+  --color-violet-800: #0a3848;
+  --color-violet-900: #062430;
+  --color-violet-950: #041820;
+
+  --font-sans: 'Barlow Condensed', 'Roboto Condensed', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'Share Tech Mono', 'Courier New', ui-monospace, monospace;
+}
+
+html {
+  color-scheme: dark;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+/* Light-mode leftovers (bg-white / red-50 panels) → NEXUS surfaces when dark is forced */
+.dark .bg-white {
+  background-color: var(--nx-surface);
+}
+.dark .bg-red-50 {
+  background-color: rgba(224, 64, 64, 0.1);
+}
+.dark .bg-amber-50 {
+  background-color: rgba(239, 160, 32, 0.1);
+}
+.dark .bg-emerald-50,
+.dark .bg-green-50 {
+  background-color: rgba(0, 228, 122, 0.1);
+}
+.dark .bg-violet-50 {
+  background-color: rgba(0, 196, 232, 0.08);
+}
+.dark .bg-sky-50 {
+  background-color: rgba(0, 196, 232, 0.08);
+}
+
+a {
+  color: var(--nx-accent);
+}
+a:hover {
+  color: color-mix(in oklab, var(--nx-accent), white 20%);
+}
+
+::selection {
+  background: rgba(0, 196, 232, 0.28);
+  color: #e0f8ff;
+}
+
+input,
+textarea,
+select,
+button {
+  font-family: inherit;
 }

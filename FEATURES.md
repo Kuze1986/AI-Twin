@@ -12,12 +12,15 @@ The app exists inside a three-AI ecosystem: Kuze (this app), Ilita (value alignm
 
 | Layer | Technology |
 |---|---|
-| Frontend | React 19, Vite, React Router v7, Tailwind CSS v4 |
+| Frontend | React 19, Vite, React Router v7, Tailwind CSS v4, NEXUS HUD design system (`nexus.css`) |
 | Backend | Express.js, TypeScript, Node 24 |
 | Database | Supabase PostgreSQL (two schemas: `public` and `kuze`) |
 | AI / LLM | Anthropic Claude (default: Sonnet 4) with OpenAI-compatible provider fallback |
 | Auth | Supabase email auth (magic link + email/password) for users; session cookie for admin |
 | Deployment | Railway via Nixpacks |
+
+### UI / NEXUS theme
+The SPA is **dark-only** under `.theme-kuze`: Bebas Neue / Barlow Condensed / Share Tech Mono, cyan accent, grid backdrop (`nx-grid-bg`), and shared HUD primitives (`.nx-panel`, `.nx-btn`, `.nx-chip`, `.nx-input`, `.nx-label`, `.nx-display`). Tailwind zinc/violet scales are remapped to NEXUS tokens so legacy utility classes on admin pages inherit the HUD look. Tool-status chips in chat use `.nx-chip` / `.nx-pulse`.
 
 ---
 

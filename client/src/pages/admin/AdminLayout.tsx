@@ -47,8 +47,10 @@ export function AdminLayout() {
 
   if (ok === null) {
     return (
-      <div className="flex min-h-screen items-center justify-center text-zinc-500">
-        Checking admin session…
+      <div className="flex min-h-screen items-center justify-center text-[var(--nx-text-2)]">
+        <span className="nx-label flex items-center gap-2">
+          <i className="nx-pulse" /> Checking admin session…
+        </span>
       </div>
     )
   }
@@ -58,45 +60,37 @@ export function AdminLayout() {
 
   const navLinks = (
     <nav className="space-y-1 text-sm">
-      <p className="mb-4 font-medium text-zinc-900 dark:text-zinc-50">Admin</p>
+      <p className="nx-label nx-label--accent mb-4">Admin</p>
       {links.map((l) => (
         <Link
           key={l.to}
           to={l.to}
           onClick={() => setNavOpen(false)}
-          className={`flex items-center gap-1.5 rounded px-2 py-1 ${
+          className={`flex items-center gap-1.5 rounded-[var(--nx-r-2)] px-2 py-1 no-underline ${
             loc.pathname === l.to
-              ? 'bg-zinc-200 text-zinc-900 dark:bg-zinc-800 dark:text-zinc-50'
-              : 'text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-900'
+              ? 'border border-[var(--nx-accent)] bg-[rgba(0,196,232,0.08)] text-[var(--nx-accent)]'
+              : 'text-[var(--nx-text-2)] hover:bg-[var(--nx-surface-2)] hover:text-[var(--nx-text)]'
           }`}
         >
           {l.label}
           {l.to === '/admin/sentinel' && patternCount > 0 && (
-            <span className="rounded-full bg-red-500 px-1.5 py-0.5 text-xs font-medium text-white">
-              {patternCount}
-            </span>
+            <span className="nx-chip nx-chip--red !px-1.5 !py-0.5">{patternCount}</span>
           )}
           {l.to === '/admin/inbox' && inboxCount > 0 && (
-            <span className="rounded-full bg-violet-600 px-1.5 py-0.5 text-xs font-medium text-white">
-              {inboxCount}
-            </span>
+            <span className="nx-chip nx-chip--cyan !px-1.5 !py-0.5">{inboxCount}</span>
           )}
           {l.to === '/admin/tasks' && taskCount > 0 && (
-            <span className="rounded-full bg-sky-600 px-1.5 py-0.5 text-xs font-medium text-white">
-              {taskCount}
-            </span>
+            <span className="nx-chip nx-chip--amber !px-1.5 !py-0.5">{taskCount}</span>
           )}
           {l.to === '/admin/tool-log' && toolLogCount > 0 && (
-            <span className="rounded-full bg-red-500 px-1.5 py-0.5 text-xs font-medium text-white">
-              {toolLogCount}
-            </span>
+            <span className="nx-chip nx-chip--red !px-1.5 !py-0.5">{toolLogCount}</span>
           )}
         </Link>
       ))}
       <Link
         to="/"
         onClick={() => setNavOpen(false)}
-        className="mt-6 block text-violet-600 underline dark:text-violet-400"
+        className="mt-6 block text-sm text-[var(--nx-accent)] underline"
       >
         ← Chat
       </Link>
@@ -105,20 +99,14 @@ export function AdminLayout() {
 
   return (
     <div className="mx-auto flex min-h-screen max-w-6xl gap-6 px-4 py-8">
-      {/* Desktop sidebar */}
-      <aside className="hidden w-44 shrink-0 sm:block">{navLinks}</aside>
+      <aside className="nx-panel hidden w-44 shrink-0 self-start p-3 sm:block">{navLinks}</aside>
 
-      {/* Mobile hamburger */}
       <div className="sm:hidden">
-        <button
-          type="button"
-          onClick={() => setNavOpen((o) => !o)}
-          className="mb-4 rounded border border-zinc-300 px-2 py-1 text-sm text-zinc-600 dark:border-zinc-700 dark:text-zinc-400"
-        >
+        <button type="button" onClick={() => setNavOpen((o) => !o)} className="nx-btn mb-4">
           {navOpen ? '✕ Close' : '☰ Menu'}
         </button>
         {navOpen && (
-          <div className="absolute left-0 top-0 z-20 min-h-screen w-48 bg-white px-4 py-8 shadow-lg dark:bg-zinc-950">
+          <div className="nx-panel absolute left-0 top-0 z-20 min-h-screen w-48 px-4 py-8 shadow-lg">
             {navLinks}
           </div>
         )}

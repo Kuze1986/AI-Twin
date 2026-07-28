@@ -21,31 +21,33 @@ import { AdminToolLogPage } from './pages/admin/AdminToolLogPage'
 export default function App() {
   return (
     <ErrorBoundary>
-    <BrowserRouter>
-      <AuthProvider>
-      <ToastProvider>
-        <Routes>
-          <Route path="/" element={<ChatPage />} />
-          <Route path="/login" element={<LoginPage />} />
-          <Route path="/admin/login" element={<AdminLoginPage />} />
-          <Route path="/admin" element={<AdminLayout />}>
-            <Route index element={<Navigate to="/admin/identity" replace />} />
-            <Route path="identity" element={<AdminIdentityPage />} />
-            <Route path="constitution" element={<AdminConstitutionPage />} />
-            <Route path="calibrate" element={<AdminCalibrationPage />} />
-            <Route path="memory" element={<AdminMemoryPage />} />
-            <Route path="sessions" element={<AdminSessionsPage />} />
-            <Route path="modes" element={<AdminModesPage />} />
-            <Route path="peers" element={<AdminPeersPage />} />
-            <Route path="tasks" element={<AdminTasksPage />} />
-            <Route path="inbox" element={<AdminInboxPage />} />
-            <Route path="tool-log" element={<AdminToolLogPage />} />
-            <Route path="sentinel" element={<AdminSentinelPage />} />
-          </Route>
-        </Routes>
-      </ToastProvider>
-      </AuthProvider>
-    </BrowserRouter>
+      <BrowserRouter>
+        <AuthProvider>
+          <ToastProvider>
+            <div className="theme-kuze min-h-screen text-[var(--nx-text)]">
+              <Routes>
+                <Route path="/" element={<ChatPage />} />
+                <Route path="/login" element={<LoginPage />} />
+                <Route path="/admin/login" element={<AdminLoginPage />} />
+                <Route path="/admin" element={<AdminLayout />}>
+                  <Route index element={<Navigate to="/admin/identity" replace />} />
+                  <Route path="identity" element={<AdminIdentityPage />} />
+                  <Route path="constitution" element={<AdminConstitutionPage />} />
+                  <Route path="calibrate" element={<AdminCalibrationPage />} />
+                  <Route path="memory" element={<AdminMemoryPage />} />
+                  <Route path="sessions" element={<AdminSessionsPage />} />
+                  <Route path="modes" element={<AdminModesPage />} />
+                  <Route path="peers" element={<AdminPeersPage />} />
+                  <Route path="tasks" element={<AdminTasksPage />} />
+                  <Route path="inbox" element={<AdminInboxPage />} />
+                  <Route path="tool-log" element={<AdminToolLogPage />} />
+                  <Route path="sentinel" element={<AdminSentinelPage />} />
+                </Route>
+              </Routes>
+            </div>
+          </ToastProvider>
+        </AuthProvider>
+      </BrowserRouter>
     </ErrorBoundary>
   )
 }
