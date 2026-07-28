@@ -2,6 +2,7 @@ import { Router } from 'express'
 import { z } from 'zod'
 import { requireAdmin } from '../adminMiddleware.js'
 import { emailConfigured, env } from '../env.js'
+import { verifyImap } from '../email/ionosClient.js'
 import { pollInbox, pollerStatus } from '../email/poller.js'
 import { sendDraft } from '../email/send.js'
 import { supabaseAdmin } from '../supabaseAdmin.js'
@@ -10,9 +11,10 @@ export const emailRouter = Router()
 
 emailRouter.use(requireAdmin)
 
-/** GET /status — channel configuration + last poll health. */
-emailRouter.get('/status', (_req, res) => {
-  res.json({
+/** GET /status — channel configuration + last poll health (+ optional IMAP probe). */
+emailRouter.get('/status', async (req, res) => {
+  const probe = String(req.query.probe ?? '') === '1'
+  const base = {
     enabled: env.EMAIL_ENABLED,
     configured: emailConfigured(),
     address: env.KUZE_EMAIL_ADDRESS,
@@ -21,16 +23,32 @@ emailRouter.get('/status', (_req, res) => {
     poll_interval_ms: env.EMAIL_POLL_INTERVAL_MS,
     daily_send_cap: env.EMAIL_DAILY_SEND_CAP,
     ...pollerStatus(),
-  })
+  }
+  if (!probe || !emailConfigured()) {
+    res.json(base)
+    return
+  }
+  const imap = await verifyImap()
+  res.json({ ...base, imap })
+})
+
+const pollBody = z.object({
+  /** Re-scan recent seen+unseen mail to recover messages stranded by pre-ingest \Seen. */
+  recover: z.boolean().optional(),
 })
 
 /** POST /poll — trigger an inbound sweep on demand. */
-emailRouter.post('/poll', async (_req, res) => {
+emailRouter.post('/poll', async (req, res) => {
   if (!emailConfigured()) {
     res.status(503).json({ error: { code: 'email_disabled', message: 'Email channel not configured' } })
     return
   }
-  const result = await pollInbox()
+  const parsed = pollBody.safeParse(req.body ?? {})
+  if (!parsed.success) {
+    res.status(400).json({ error: { code: 'validation', message: parsed.error.message } })
+    return
+  }
+  const result = await pollInbox({ recover: parsed.data.recover })
   res.json(result)
 })
 

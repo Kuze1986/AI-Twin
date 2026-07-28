@@ -241,7 +241,7 @@ On startup, Kuze checks whether the Crucible simulator is reachable and logs the
 Kuze operates his own inbox, **kuze@bioloopnexus.com**, over IONOS IMAP/SMTP. Phase 1 covers inbound ingestion and human-approved outbound; nothing is ever sent autonomously yet.
 
 ### Inbound polling
-A background sweep (same interval pattern as consolidation) polls INBOX for unseen mail, parses it, dedupes on RFC-5322 `Message-ID`, and persists each message to `kuze.email_messages`. The loop stays dormant unless `EMAIL_ENABLED=true` and all IONOS credentials are set.
+A background sweep (same interval pattern as consolidation) polls INBOX for unseen mail, parses it, dedupes on RFC-5322 `Message-ID`, and persists each message to `kuze.email_messages`. The loop stays dormant unless `EMAIL_ENABLED=true` and all IONOS credentials are set. Messages are marked `\Seen` **only after** a successful DB ingest (or a duplicate Message-ID) — never before — so a failed insert cannot permanently skip mail. Admin → Inbox **Recover recent** re-scans the last 14 days of seen+unseen mail for stranded messages.
 
 ### Warm/cold classification
 Each sender is classified against `kuze.email_contacts` and thread history: **known** (a known contact), **warm** (a thread Kuze has already replied to), or **cold** (new contact). This drives the hybrid autonomy model — warm/known auto-reply is Phase 2; in Phase 1 every draft is queued.
@@ -435,6 +435,10 @@ pull live data. Cross-provider tool calling is a future extension.
 | `ai_peer_interactions` | Inbound and outbound messages exchanged with Ilita and Stele |
 | `tool_call_log` | Every operational tool call — input, output, duration, error (Phase 1) |
 | `constitution` | Versioned foundational charter; the active row is prepended to every system prompt |
+
+**PostgREST exposure (required):** nexus-core must list `kuze` in `authenticator`'s `pgrst.db_schemas` and grant `service_role` on `kuze` tables. Without that, server calls to `.schema('kuze')` fail with `Invalid schema: kuze` (Sentinel, peers, inbox, tasks, tool log, constitution). Access is service-role-only — `anon` / `authenticated` have no USAGE on `kuze`.
+
+**Constitution UI:** Admin → Constitution is intentionally read-only. Amendments are deliberate re-ratifications in SQL (new version row + flip `is_active`), not in-app edits.
 
 ---
 

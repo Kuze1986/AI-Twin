@@ -78,15 +78,19 @@ export function AdminInboxPage() {
     window.setTimeout(() => setNotice(null), 4000)
   }
 
-  const poll = async () => {
-    setBusy('poll')
+  const poll = async (recover = false) => {
+    setBusy(recover ? 'recover' : 'poll')
     setError(null)
     try {
-      const r = (await adminFetch('/email/poll', { method: 'POST', body: '{}' })) as {
-        fetched: number
-        ingested: number
-      }
-      flash(`Polled inbox — ${r.ingested} new message(s) ingested.`)
+      const r = (await adminFetch('/email/poll', {
+        method: 'POST',
+        body: JSON.stringify({ recover }),
+      })) as { fetched: number; ingested: number; recover?: boolean }
+      flash(
+        recover
+          ? `Recovery sweep — ${r.ingested} new of ${r.fetched} scanned.`
+          : `Polled inbox — ${r.ingested} new message(s) ingested.`,
+      )
       await loadPending()
       await loadStatus()
     } catch (e) {
@@ -129,21 +133,47 @@ export function AdminInboxPage() {
 
   return (
     <div>
-      <div className="mb-2 flex items-center justify-between gap-3">
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-medium text-zinc-900 dark:text-zinc-50">Inbox</h1>
-        <button
-          type="button"
-          onClick={poll}
-          disabled={busy === 'poll' || !status?.configured}
-          className="rounded bg-violet-600 px-3 py-1 text-sm text-white disabled:opacity-40"
-        >
-          {busy === 'poll' ? 'Polling…' : 'Poll now'}
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => poll(false)}
+            disabled={busy !== null || !status?.configured}
+            className="rounded bg-violet-600 px-3 py-1 text-sm text-white disabled:opacity-40"
+          >
+            {busy === 'poll' ? 'Polling…' : 'Poll now'}
+          </button>
+          <button
+            type="button"
+            onClick={() => poll(true)}
+            disabled={busy !== null || !status?.configured}
+            title="Re-scan recent mail (including already-read) to recover messages missed while the DB schema was broken"
+            className="rounded border border-violet-600 px-3 py-1 text-sm text-violet-700 disabled:opacity-40 dark:text-violet-300"
+          >
+            {busy === 'recover' ? 'Recovering…' : 'Recover recent'}
+          </button>
+        </div>
       </div>
       <p className="mb-4 text-sm text-zinc-600 dark:text-zinc-400">
-        Drafts Kuze prepared from {status?.address || 'his inbox'}. Nothing sends until you approve
-        it here — cold outreach and every new contact land in this queue.
+        Approval queue for drafts Kuze prepared from {status?.address || 'his inbox'}. Nothing cold
+        sends until you approve it here. Warm/known replies may auto-send when configured.
       </p>
+
+      {status && (
+        <p className="mb-3 text-xs text-zinc-500">
+          Channel:{' '}
+          {status.configured ? (
+            <span className="text-emerald-600 dark:text-emerald-400">active</span>
+          ) : status.enabled ? (
+            <span className="text-amber-600">enabled but credentials incomplete</span>
+          ) : (
+            <span className="text-amber-600">dormant</span>
+          )}
+          {status.lastPollAt && ` · last poll ${new Date(status.lastPollAt).toLocaleString()}`}
+          {status.running && ' · running…'}
+        </p>
+      )}
 
       {status && !status.configured && (
         <div className="mb-4 rounded border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-300">
