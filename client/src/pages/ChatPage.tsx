@@ -75,6 +75,12 @@ export function ChatPage() {
 
   const token = session?.access_token
 
+  const discardMissingSession = useCallback(() => {
+    clearStoredSessionId()
+    setSessionId(null)
+    setMessages([])
+  }, [])
+
   useEffect(() => {
     fetch('/api/public/identity')
       .then((r) => r.json())
@@ -90,6 +96,12 @@ export function ChatPage() {
     const res = await fetch(`/api/sessions/${sid}/messages`, {
       headers: { Authorization: `Bearer ${token}` },
     })
+    if (res.status === 404) {
+      // A database reset or an expired/deleted session can leave a stale ID in
+      // local storage. Drop it so the next message creates a fresh session.
+      discardMissingSession()
+      return
+    }
     if (!res.ok) return
     const rows = (await res.json()) as { id: string; role: string; content: string }[]
     setMessages(
@@ -99,7 +111,7 @@ export function ChatPage() {
         content: r.content,
       })),
     )
-  }, [token])
+  }, [discardMissingSession, token])
 
   useEffect(() => {
     void loadHistory()
@@ -189,7 +201,13 @@ export function ChatPage() {
         },
       )
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Request failed')
+      const message = e instanceof Error ? e.message : 'Request failed'
+      if (message === 'Session not found') {
+        discardMissingSession()
+        setError('Your previous session is no longer available. Retry to start a new one.')
+      } else {
+        setError(message)
+      }
     } finally {
       setStreaming(false)
       setToolChip(null)
@@ -283,9 +301,7 @@ export function ChatPage() {
           <button
             type="button"
             onClick={() => {
-              clearStoredSessionId()
-              setSessionId(null)
-              setMessages([])
+              discardMissingSession()
               setLastUserMsg(null)
             }}
             className="nx-btn nx-btn--ghost !px-2 !py-1 text-[11px]"
