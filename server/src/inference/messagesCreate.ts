@@ -5,9 +5,14 @@ import {
 } from './adapters/openAiCompatibleHttp.js'
 import { messagesCreate as openaiMessagesCreate, streamText as openaiStreamText } from './adapters/openaiSdk.js'
 import { messagesCreate as geminiMessagesCreate, streamText as geminiStreamText } from './adapters/geminiSdk.js'
+import {
+  messagesCreate as bioloopMessagesCreate,
+  streamText as bioloopStreamText,
+} from './adapters/bioloopFetch.js'
+import { providerConfigured as bioloopProviderConfigured } from '@bioloop/llm'
 
 export type ModelTier = 'fast' | 'balanced' | 'powerful'
-export type Provider = 'anthropic' | 'openai' | 'gemini' | 'openai_compatible'
+export type Provider = 'anthropic' | 'openai' | 'gemini' | 'xai' | 'kimi' | 'openai_compatible'
 
 const ALIASES: Record<string, Provider> = {
   anthropic: 'anthropic',
@@ -16,6 +21,10 @@ const ALIASES: Record<string, Provider> = {
   gpt: 'openai',
   gemini: 'gemini',
   google: 'gemini',
+  xai: 'xai',
+  grok: 'xai',
+  kimi: 'kimi',
+  moonshot: 'kimi',
   openai_compatible: 'openai_compatible',
   'openai-compatible': 'openai_compatible',
   ollama_openai: 'openai_compatible',
@@ -25,10 +34,18 @@ const ALIASES: Record<string, Provider> = {
 /** Whether a provider has the credentials/config it needs to run. */
 function providerConfigured(p: Provider): boolean {
   switch (p) {
-    case 'anthropic': return !!process.env.ANTHROPIC_API_KEY
-    case 'openai': return !!process.env.OPENAI_API_KEY
-    case 'gemini': return !!(process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY)
-    case 'openai_compatible': return !!process.env.KUZE_OPENAI_BASE_URL
+    case 'anthropic':
+      return !!process.env.ANTHROPIC_API_KEY
+    case 'openai':
+      return !!process.env.OPENAI_API_KEY
+    case 'gemini':
+      return !!(process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY)
+    case 'xai':
+      return bioloopProviderConfigured('xai')
+    case 'kimi':
+      return bioloopProviderConfigured('kimi')
+    case 'openai_compatible':
+      return !!process.env.KUZE_OPENAI_BASE_URL
   }
 }
 
@@ -42,18 +59,83 @@ export function resolveActiveProvider(): Provider | null {
   const mapped = ALIASES[explicit]
   if (mapped && providerConfigured(mapped)) return mapped
 
-  for (const p of ['anthropic', 'openai', 'gemini', 'openai_compatible'] as Provider[]) {
+  for (const p of [
+    'anthropic',
+    'openai',
+    'gemini',
+    'xai',
+    'kimi',
+    'openai_compatible',
+  ] as Provider[]) {
     if (providerConfigured(p)) return p
   }
   return null
 }
 
 const TIER_ENV: Record<Provider, Record<ModelTier, string>> = {
-  anthropic: { fast: 'ANTHROPIC_MODEL_FAST', balanced: 'ANTHROPIC_MODEL_BALANCED', powerful: 'ANTHROPIC_MODEL_POWERFUL' },
-  openai: { fast: 'OPENAI_MODEL_FAST', balanced: 'OPENAI_MODEL_BALANCED', powerful: 'OPENAI_MODEL_POWERFUL' },
-  gemini: { fast: 'GEMINI_MODEL_FAST', balanced: 'GEMINI_MODEL_BALANCED', powerful: 'GEMINI_MODEL_POWERFUL' },
-  // OpenAI-compatible endpoints reuse the OpenAI model names by default.
-  openai_compatible: { fast: 'OPENAI_MODEL_FAST', balanced: 'OPENAI_MODEL_BALANCED', powerful: 'OPENAI_MODEL_POWERFUL' },
+  anthropic: {
+    fast: 'ANTHROPIC_MODEL_FAST',
+    balanced: 'ANTHROPIC_MODEL_BALANCED',
+    powerful: 'ANTHROPIC_MODEL_POWERFUL',
+  },
+  openai: {
+    fast: 'OPENAI_MODEL_FAST',
+    balanced: 'OPENAI_MODEL_BALANCED',
+    powerful: 'OPENAI_MODEL_POWERFUL',
+  },
+  gemini: {
+    fast: 'GEMINI_MODEL_FAST',
+    balanced: 'GEMINI_MODEL_BALANCED',
+    powerful: 'GEMINI_MODEL_POWERFUL',
+  },
+  xai: {
+    fast: 'XAI_MODEL_FAST',
+    balanced: 'XAI_MODEL_BALANCED',
+    powerful: 'XAI_MODEL_POWERFUL',
+  },
+  kimi: {
+    fast: 'KIMI_MODEL_FAST',
+    balanced: 'KIMI_MODEL_BALANCED',
+    powerful: 'KIMI_MODEL_POWERFUL',
+  },
+  openai_compatible: {
+    fast: 'OPENAI_MODEL_FAST',
+    balanced: 'OPENAI_MODEL_BALANCED',
+    powerful: 'OPENAI_MODEL_POWERFUL',
+  },
+}
+
+const TIER_DEFAULTS: Record<Provider, Record<ModelTier, string>> = {
+  anthropic: {
+    fast: 'claude-haiku-4-5-20251001',
+    balanced: 'claude-sonnet-4-6',
+    powerful: 'claude-opus-4-8',
+  },
+  openai: {
+    fast: 'gpt-4o-mini',
+    balanced: 'gpt-4o',
+    powerful: 'gpt-4o',
+  },
+  gemini: {
+    fast: 'gemini-2.0-flash',
+    balanced: 'gemini-2.0-flash',
+    powerful: 'gemini-2.0-flash',
+  },
+  xai: {
+    fast: 'grok-4.5',
+    balanced: 'grok-4.5',
+    powerful: 'grok-4.5',
+  },
+  kimi: {
+    fast: 'kimi-k2',
+    balanced: 'kimi-k3',
+    powerful: 'kimi-k3',
+  },
+  openai_compatible: {
+    fast: 'gpt-4o-mini',
+    balanced: 'gpt-4o',
+    powerful: 'gpt-4o',
+  },
 }
 
 /**
@@ -65,7 +147,15 @@ export function resolveModel(
   provider: Provider = resolveActiveProvider() ?? 'anthropic',
 ): string {
   const envKey = TIER_ENV[provider][tierOrModel as ModelTier]
-  if (envKey) return process.env[envKey] ?? tierOrModel
+  if (envKey) {
+    const configuredModel = process.env[envKey]?.trim()
+    // Tiers are internal routing labels, never provider model IDs. Guard against a
+    // deployment variable such as OPENAI_MODEL_BALANCED=balanced sending a 404.
+    if (configuredModel && !(['fast', 'balanced', 'powerful'] as string[]).includes(configuredModel)) {
+      return configuredModel
+    }
+    return TIER_DEFAULTS[provider][tierOrModel as ModelTier]
+  }
   return tierOrModel // already an explicit model id
 }
 
@@ -82,7 +172,9 @@ interface CreateParams {
 
 export class NoProviderError extends Error {
   constructor() {
-    super('no LLM provider configured — set ANTHROPIC_API_KEY, OPENAI_API_KEY, GEMINI_API_KEY, or KUZE_OPENAI_BASE_URL')
+    super(
+      'no LLM provider configured — set ANTHROPIC_API_KEY, OPENAI_API_KEY, GEMINI_API_KEY, XAI_API_KEY, KIMI_API_KEY, or KUZE_OPENAI_BASE_URL',
+    )
     this.name = 'NoProviderError'
   }
 }
@@ -105,6 +197,9 @@ export async function messagesCreate(params: CreateParams): Promise<any> {
   const textParams = { ...textOnly, model }
   if (provider === 'openai') return openaiMessagesCreate(textParams)
   if (provider === 'gemini') return geminiMessagesCreate(textParams)
+  if (provider === 'xai' || provider === 'kimi') {
+    return bioloopMessagesCreate({ ...textParams, provider })
+  }
   return openAiHttpMessagesCreate(textParams)
 }
 
@@ -142,6 +237,10 @@ export async function streamAssistantText(
   }
   if (provider === 'gemini') {
     for await (const chunk of geminiStreamText({ ...rest, model })) emit(chunk)
+    return full
+  }
+  if (provider === 'xai' || provider === 'kimi') {
+    for await (const chunk of bioloopStreamText({ ...rest, model, provider })) emit(chunk)
     return full
   }
   for await (const chunk of openAiHttpStreamText({ ...rest, model })) emit(chunk)

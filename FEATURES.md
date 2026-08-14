@@ -351,16 +351,18 @@ Non-fatal server feedback (consolidation complete, consolidation failed) surface
 
 ## Inference Provider Switching
 
-Kuze activates on **whatever LLM key is present** — no provider is hard-required to boot. Four
+Kuze activates on **whatever LLM key is present** — no provider is hard-required to boot. Six
 providers are supported: **Anthropic** (`@anthropic-ai/sdk`), **OpenAI** (`openai` SDK),
-**Google Gemini** (`@google/generative-ai`), and any **OpenAI-compatible** HTTP endpoint
+**Google Gemini** (`@google/generative-ai`), **xAI Grok** and **Kimi/Moonshot** (via shared
+[`@bioloop/llm`](../bioloop-llm/)), and any **OpenAI-compatible** HTTP endpoint
 (Ollama, vLLM, LiteLLM, etc.).
 
 ### Auto-detection
 `resolveActiveProvider()` honors an explicit `KUZE_INFERENCE_PROVIDER` when that provider's key
-is present; otherwise it auto-detects by priority: Anthropic → OpenAI → Gemini → OpenAI-compatible,
-based on which of `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / `GEMINI_API_KEY` / `KUZE_OPENAI_BASE_URL`
-is set. The active provider is logged at startup.
+is present; otherwise it auto-detects by priority: Anthropic → OpenAI → Gemini → xAI → Kimi →
+OpenAI-compatible, based on which of `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / `GEMINI_API_KEY` /
+`XAI_API_KEY` (or `GROK_API_KEY`) / `KIMI_API_KEY` (or `MOONSHOT_API_KEY`) /
+`KUZE_OPENAI_BASE_URL` is set. The active provider is logged at startup.
 
 ### No provider configured
 The server still boots (admin and other routes work); chat returns a clear `503 no_llm_provider`
@@ -389,6 +391,10 @@ pull live data. Cross-provider tool calling is a future extension.
 | `OPENAI_MODEL_FAST/BALANCED/POWERFUL` | No | OpenAI model per tier (defaults gpt-4o-mini/gpt-4o) |
 | `GEMINI_API_KEY` | One provider key required | Google Gemini key (or `GOOGLE_API_KEY`) |
 | `GEMINI_MODEL_FAST/BALANCED/POWERFUL` | No | Gemini model per tier (defaults gemini-2.0-flash) |
+| `XAI_API_KEY` / `GROK_API_KEY` | One provider key required | xAI Grok (via `@bioloop/llm`) |
+| `XAI_MODEL_FAST/BALANCED/POWERFUL` | No | Grok model per tier (default grok-4.5) |
+| `KIMI_API_KEY` / `MOONSHOT_API_KEY` | One provider key required | Kimi Moonshot K2/K3 |
+| `KIMI_MODEL_FAST/BALANCED/POWERFUL` | No | Defaults kimi-k2 / kimi-k3 / kimi-k3 |
 | `KUZE_INFERENCE_PROVIDER` | No | Force a provider; else auto-detected from keys present |
 | `KUZE_OPENAI_BASE_URL` | No | OpenAI-compatible endpoint (Ollama/vLLM/LiteLLM) |
 | `SUPABASE_URL` | Yes | Supabase project URL |

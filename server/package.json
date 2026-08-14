@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",
+    "@bioloop/llm": "file:../../bioloop-llm",
     "@google/generative-ai": "^0.24.1",
     "@supabase/supabase-js": "^2.49.1",
     "cookie-parser": "^1.4.7",
