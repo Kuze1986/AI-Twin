@@ -48,55 +48,43 @@ export function LoginPage() {
 
   return (
     <div className="mx-auto flex min-h-screen max-w-md flex-col justify-center px-4">
-      <h1 className="mb-6 text-2xl font-medium text-zinc-900 dark:text-zinc-50">Sign in</h1>
-      <p className="mb-6 text-sm text-zinc-600 dark:text-zinc-400">
+      <p className="nx-label nx-label--accent mb-2">NEXUS</p>
+      <h1 className="nx-display mb-2 text-4xl">Kuze</h1>
+      <p className="mb-6 text-sm text-[var(--nx-text-2)]">
         Access your twin.{' '}
-        <Link className="text-violet-600 underline dark:text-violet-400" to="/admin/login">
+        <Link className="underline" to="/admin/login">
           Admin
         </Link>
       </p>
-      <label className="mb-2 text-sm text-zinc-700 dark:text-zinc-300">Email</label>
-      <input
-        className="mb-4 rounded border border-zinc-300 bg-white px-3 py-2 text-zinc-900 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
-        type="email"
-        value={email}
-        onChange={(e) => setEmail(e.target.value)}
-        autoComplete="email"
-      />
-      <label className="mb-2 text-sm text-zinc-700 dark:text-zinc-300">Password</label>
-      <input
-        className="mb-4 rounded border border-zinc-300 bg-white px-3 py-2 text-zinc-900 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
-        type="password"
-        value={password}
-        onChange={(e) => setPassword(e.target.value)}
-        autoComplete="current-password"
-      />
-      {error && <p className="mb-3 text-sm text-red-600 dark:text-red-400">{error}</p>}
-      <div className="flex flex-wrap gap-2">
-        <button
-          type="button"
-          disabled={busy}
-          onClick={() => void signIn()}
-          className="rounded bg-zinc-900 px-4 py-2 text-sm text-white disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900"
-        >
-          Sign in
-        </button>
-        <button
-          type="button"
-          disabled={busy}
-          onClick={() => void signUp()}
-          className="rounded border border-zinc-300 px-4 py-2 text-sm dark:border-zinc-600"
-        >
-          Sign up
-        </button>
-        <button
-          type="button"
-          disabled={busy}
-          onClick={() => void magic()}
-          className="rounded border border-zinc-300 px-4 py-2 text-sm dark:border-zinc-600"
-        >
-          Magic link
-        </button>
+      <div className="nx-panel nx-panel--strong nx-corners p-4">
+        <label className="nx-label mb-2 block">Email</label>
+        <input
+          className="nx-input mb-4"
+          type="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          autoComplete="email"
+        />
+        <label className="nx-label mb-2 block">Password</label>
+        <input
+          className="nx-input mb-4"
+          type="password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          autoComplete="current-password"
+        />
+        {error && <p className="mb-3 text-sm text-[var(--nx-red)]">{error}</p>}
+        <div className="flex flex-wrap gap-2">
+          <button type="button" disabled={busy} onClick={() => void signIn()} className="nx-btn nx-btn--primary disabled:opacity-50">
+            Sign in
+          </button>
+          <button type="button" disabled={busy} onClick={() => void signUp()} className="nx-btn disabled:opacity-50">
+            Sign up
+          </button>
+          <button type="button" disabled={busy} onClick={() => void magic()} className="nx-btn nx-btn--ghost disabled:opacity-50">
+            Magic link
+          </button>
+        </div>
       </div>
     </div>
   )

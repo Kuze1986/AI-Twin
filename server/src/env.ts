@@ -9,12 +9,25 @@ function req(name: string): string {
 export const env = {
   NODE_ENV: process.env.NODE_ENV ?? 'development',
   PORT: Number(process.env.PORT ?? 3001),
-  ANTHROPIC_API_KEY: req('ANTHROPIC_API_KEY'),
+  // LLM provider keys are all optional — Kuze activates on whichever one is present
+  // (auto-detected). The server boots even with none; chat then returns a clear 503.
+  ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY ?? '',
   ANTHROPIC_MODEL: process.env.ANTHROPIC_MODEL ?? 'claude-sonnet-4-6',
   ANTHROPIC_MODEL_FAST: process.env.ANTHROPIC_MODEL_FAST ?? 'claude-haiku-4-5-20251001',
   ANTHROPIC_MODEL_BALANCED: process.env.ANTHROPIC_MODEL_BALANCED ?? 'claude-sonnet-4-6',
   ANTHROPIC_MODEL_POWERFUL: process.env.ANTHROPIC_MODEL_POWERFUL ?? 'claude-opus-4-8',
   ANTHROPIC_BASE_URL: process.env.ANTHROPIC_BASE_URL,
+  // OpenAI (native SDK)
+  OPENAI_API_KEY: process.env.OPENAI_API_KEY ?? '',
+  OPENAI_BASE_URL: process.env.OPENAI_BASE_URL,
+  OPENAI_MODEL_FAST: process.env.OPENAI_MODEL_FAST ?? 'gpt-4o-mini',
+  OPENAI_MODEL_BALANCED: process.env.OPENAI_MODEL_BALANCED ?? 'gpt-4o',
+  OPENAI_MODEL_POWERFUL: process.env.OPENAI_MODEL_POWERFUL ?? 'gpt-4o',
+  // Google Gemini
+  GEMINI_API_KEY: process.env.GEMINI_API_KEY ?? process.env.GOOGLE_API_KEY ?? '',
+  GEMINI_MODEL_FAST: process.env.GEMINI_MODEL_FAST ?? 'gemini-2.0-flash',
+  GEMINI_MODEL_BALANCED: process.env.GEMINI_MODEL_BALANCED ?? 'gemini-2.0-flash',
+  GEMINI_MODEL_POWERFUL: process.env.GEMINI_MODEL_POWERFUL ?? 'gemini-1.5-pro',
   SUPABASE_URL: req('SUPABASE_URL'),
   SUPABASE_SERVICE_ROLE_KEY: req('SUPABASE_SERVICE_ROLE_KEY'),
   MAX_HISTORY_TOKENS: Number(process.env.MAX_HISTORY_TOKENS ?? 3000),

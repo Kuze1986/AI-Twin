@@ -10,7 +10,13 @@ import { buildSystemPrompt } from '../promptBuilder.js'
 import type { ChatMode, DemoForgeContext } from '../types.js'
 import { budgetHistory, type HistoryTurn } from '../tokenBudget.js'
 import { supabaseAdmin } from '../supabaseAdmin.js'
-import { messagesCreate as anthropicMessagesCreate, resolveModel, supportsTools } from '../inference/messagesCreate.js'
+import {
+  messagesCreate as anthropicMessagesCreate,
+  resolveActiveProvider,
+  resolveModel,
+  streamAssistantText,
+  supportsTools,
+} from '../inference/messagesCreate.js'
 import { runToolLoop } from '../inference/runToolLoop.js'
 import { getToolsForMode } from '../tools/registry.js'
 import { createTask } from '../tasks/create.js'
@@ -91,6 +97,13 @@ chatRouter.post('/', requireUserAuth, chatLimiter, async (req, res) => {
   if (!takeRateSlot(userChatRateLimiter, userId, 30)) {
     res.status(429).json({
       error: { code: 'rate_limited', message: 'Too many chat requests; slow down and retry shortly.' },
+    })
+    return
+  }
+
+  if (!resolveActiveProvider()) {
+    res.status(503).json({
+      error: { code: 'no_llm_provider', message: 'No LLM provider is configured — set an API key.' },
     })
     return
   }
@@ -302,20 +315,12 @@ chatRouter.post('/', requireUserAuth, chatLimiter, async (req, res) => {
         onToolEvent: (tool, state) => send({ type: 'tool_status', tool, state }),
       })
     } else {
-      const stream = await anthropicMessagesCreate({
-        tier: 'balanced',
-        max_tokens: 8192,
-        system: systemPrompt,
-        messages,
-        stream: true,
-      })
-      for await (const event of stream) {
-        if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
-          const text = event.delta.text
-          assistantText += text
-          send({ type: 'text', text })
-        }
-      }
+      // Provider-agnostic streaming (OpenAI / Gemini / OpenAI-compatible, or Anthropic when
+      // no tools apply). Tool calling is Anthropic-only and handled in the branch above.
+      assistantText = await streamAssistantText(
+        { tier: 'balanced', max_tokens: 8192, system: systemPrompt, messages },
+        (text) => send({ type: 'text', text }),
+      )
     }
   } catch (e: unknown) {
     const err = e as Error & { status?: number }
@@ -550,20 +555,10 @@ chatRouter.post('/demoforge', async (req, res) => {
 
   let assistantText = ''
   try {
-    const stream = await anthropicMessagesCreate({
-      tier: 'balanced',
-      max_tokens: 8192,
-      system: systemPrompt,
-      messages,
-      stream: true,
-    })
-    for await (const event of stream) {
-      if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
-        const text = event.delta.text
-        assistantText += text
-        send({ type: 'text', text })
-      }
-    }
+    assistantText = await streamAssistantText(
+      { tier: 'balanced', max_tokens: 8192, system: systemPrompt, messages },
+      (text) => send({ type: 'text', text }),
+    )
   } catch (e: unknown) {
     const err = e as Error & { status?: number }
     const message = err.message ?? 'Claude request failed'

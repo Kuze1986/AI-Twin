@@ -1,8 +1,9 @@
 node_modules/
 dist/
 .env
-.env.local
-.env.txt
+.env.*
+!.env.example
+!.env.*.example
 *.log
 .DS_Store
 client/dist/

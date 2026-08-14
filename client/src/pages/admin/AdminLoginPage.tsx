@@ -23,29 +23,27 @@ export function AdminLoginPage() {
 
   return (
     <div className="mx-auto flex min-h-screen max-w-sm flex-col justify-center px-4">
-      <h1 className="mb-4 text-xl font-medium text-zinc-900 dark:text-zinc-50">Admin</h1>
-      <p className="mb-4 text-sm text-zinc-600 dark:text-zinc-400">
-        Password from <code className="text-xs">ADMIN_PASSWORD</code>.{' '}
-        <Link className="text-violet-600 underline" to="/">
+      <p className="nx-label nx-label--amber mb-2">Restricted</p>
+      <h1 className="nx-display mb-2 text-3xl">Admin</h1>
+      <p className="mb-4 text-sm text-[var(--nx-text-2)]">
+        Password from <code className="nx-mono text-xs">ADMIN_PASSWORD</code>.{' '}
+        <Link className="underline" to="/">
           Chat
         </Link>
       </p>
-      <input
-        type="password"
-        className="mb-3 rounded border border-zinc-300 bg-white px-3 py-2 dark:border-zinc-600 dark:bg-zinc-900"
-        value={password}
-        onChange={(e) => setPassword(e.target.value)}
-        onKeyDown={(e) => e.key === 'Enter' && void submit()}
-      />
-      {error && <p className="mb-2 text-sm text-red-600">{error}</p>}
-      <button
-        type="button"
-        disabled={busy}
-        onClick={() => void submit()}
-        className="rounded bg-zinc-900 px-4 py-2 text-sm text-white disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900"
-      >
-        Sign in
-      </button>
+      <div className="nx-panel nx-panel--strong p-4">
+        <input
+          type="password"
+          className="nx-input mb-3"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && void submit()}
+        />
+        {error && <p className="mb-2 text-sm text-[var(--nx-red)]">{error}</p>}
+        <button type="button" disabled={busy} onClick={() => void submit()} className="nx-btn nx-btn--primary w-full disabled:opacity-50">
+          Sign in
+        </button>
+      </div>
     </div>
   )
 }

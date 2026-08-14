@@ -247,7 +247,7 @@ Respond naturally as if this was your first attempt.
 
   try {
     const stream = await anthropicMessagesCreate({
-      model: process.env.ANTHROPIC_MODEL,
+      tier: 'balanced',
       max_tokens: 8192,
       system: correctedSystemPrompt,
       messages,

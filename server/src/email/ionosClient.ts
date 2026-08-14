@@ -29,12 +29,23 @@ function imapClient(): ImapFlow {
   })
 }
 
+export interface FetchInboundOptions {
+  /** Default true. When false, pull recent mail (seen + unseen) for recovery after failed ingests. */
+  unseenOnly?: boolean
+  /** Used when unseenOnly is false. Default 14 days. */
+  sinceDays?: number
+  limit?: number
+}
+
 /**
- * Fetch unseen messages from INBOX, parse them, and (best-effort) mark them \Seen so a
- * later poll does not re-surface them. Dedupe against already-ingested Message-IDs still
- * happens in the DB layer — this is just the first line of defense.
+ * Fetch messages from INBOX and parse them. Does NOT mark \Seen — the poller marks UIDs
+ * only after processInbound succeeds. Marking earlier stranded mail forever when DB inserts
+ * failed (e.g. Invalid schema: kuze).
  */
-export async function fetchUnseen(limit = 25): Promise<FetchedEmail[]> {
+export async function fetchInbound(options: FetchInboundOptions = {}): Promise<FetchedEmail[]> {
+  const unseenOnly = options.unseenOnly ?? true
+  const limit = options.limit ?? 25
+  const sinceDays = options.sinceDays ?? 14
   const client = imapClient()
   const out: FetchedEmail[] = []
 
@@ -42,8 +53,11 @@ export async function fetchUnseen(limit = 25): Promise<FetchedEmail[]> {
   try {
     const lock = await client.getMailboxLock('INBOX')
     try {
-      const uids = await client.search({ seen: false }, { uid: true })
-      const take = (uids || []).slice(0, limit)
+      const criteria = unseenOnly
+        ? { seen: false }
+        : { since: new Date(Date.now() - sinceDays * 86_400_000) }
+      const uids = await client.search(criteria, { uid: true })
+      const take = (uids || []).slice(-limit) // most recent UIDs when recovering a window
       if (take.length === 0) return out
 
       for await (const msg of client.fetch(
@@ -73,14 +87,6 @@ export async function fetchUnseen(limit = 25): Promise<FetchedEmail[]> {
           date: (parsed.date ?? new Date()).toISOString(),
         })
       }
-
-      // Mark processed messages as seen (best-effort — a failure here just means we
-      // re-fetch and dedupe on Message-ID next cycle).
-      try {
-        await client.messageFlagsAdd(take, ['\\Seen'], { uid: true })
-      } catch (e) {
-        console.warn('[email] could not mark messages seen:', (e as Error).message)
-      }
     } finally {
       lock.release()
     }
@@ -89,6 +95,30 @@ export async function fetchUnseen(limit = 25): Promise<FetchedEmail[]> {
   }
 
   return out
+}
+
+/** @deprecated Prefer fetchInbound — kept for any callers still importing the old name. */
+export async function fetchUnseen(limit = 25): Promise<FetchedEmail[]> {
+  return fetchInbound({ unseenOnly: true, limit })
+}
+
+/** Mark UIDs \Seen after successful DB ingest (best-effort). */
+export async function markSeen(uids: number[]): Promise<void> {
+  if (uids.length === 0) return
+  const client = imapClient()
+  await client.connect()
+  try {
+    const lock = await client.getMailboxLock('INBOX')
+    try {
+      await client.messageFlagsAdd(uids, ['\\Seen'], { uid: true })
+    } finally {
+      lock.release()
+    }
+  } catch (e) {
+    console.warn('[email] could not mark messages seen:', (e as Error).message)
+  } finally {
+    await client.logout().catch(() => {})
+  }
 }
 
 function normalizeRefs(refs: string | string[] | undefined): string[] {

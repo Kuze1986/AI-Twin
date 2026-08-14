@@ -12,12 +12,15 @@ The app exists inside a three-AI ecosystem: Kuze (this app), Ilita (value alignm
 
 | Layer | Technology |
 |---|---|
-| Frontend | React 19, Vite, React Router v7, Tailwind CSS v4 |
+| Frontend | React 19, Vite, React Router v7, Tailwind CSS v4, NEXUS HUD design system (`nexus.css`) |
 | Backend | Express.js, TypeScript, Node 24 |
 | Database | Supabase PostgreSQL (two schemas: `public` and `kuze`) |
 | AI / LLM | Anthropic Claude (default: Sonnet 4) with OpenAI-compatible provider fallback |
 | Auth | Supabase email auth (magic link + email/password) for users; session cookie for admin |
 | Deployment | Railway via Nixpacks |
+
+### UI / NEXUS theme
+The SPA is **dark-only** under `.theme-kuze`: Bebas Neue / Barlow Condensed / Share Tech Mono, cyan accent, grid backdrop (`nx-grid-bg`), and shared HUD primitives (`.nx-panel`, `.nx-btn`, `.nx-chip`, `.nx-input`, `.nx-label`, `.nx-display`). Tailwind zinc/violet scales are remapped to NEXUS tokens so legacy utility classes on admin pages inherit the HUD look. Tool-status chips in chat use `.nx-chip` / `.nx-pulse`.
 
 ---
 
@@ -241,7 +244,7 @@ On startup, Kuze checks whether the Crucible simulator is reachable and logs the
 Kuze operates his own inbox, **kuze@bioloopnexus.com**, over IONOS IMAP/SMTP. Phase 1 covers inbound ingestion and human-approved outbound; nothing is ever sent autonomously yet.
 
 ### Inbound polling
-A background sweep (same interval pattern as consolidation) polls INBOX for unseen mail, parses it, dedupes on RFC-5322 `Message-ID`, and persists each message to `kuze.email_messages`. The loop stays dormant unless `EMAIL_ENABLED=true` and all IONOS credentials are set.
+A background sweep (same interval pattern as consolidation) polls INBOX for unseen mail, parses it, dedupes on RFC-5322 `Message-ID`, and persists each message to `kuze.email_messages`. The loop stays dormant unless `EMAIL_ENABLED=true` and all IONOS credentials are set. Messages are marked `\Seen` **only after** a successful DB ingest (or a duplicate Message-ID) — never before — so a failed insert cannot permanently skip mail. Admin → Inbox **Recover recent** re-scans the last 14 days of seen+unseen mail for stranded messages.
 
 ### Warm/cold classification
 Each sender is classified against `kuze.email_contacts` and thread history: **known** (a known contact), **warm** (a thread Kuze has already replied to), or **cold** (new contact). This drives the hybrid autonomy model — warm/known auto-reply is Phase 2; in Phase 1 every draft is queued.
@@ -348,7 +351,32 @@ Non-fatal server feedback (consolidation complete, consolidation failed) surface
 
 ## Inference Provider Switching
 
-The inference layer is abstracted so Kuze can run against either Anthropic's API or any OpenAI-compatible endpoint (Ollama, vLLM, LiteLLM, etc.). The active provider is set via the `KUZE_INFERENCE_PROVIDER` environment variable. Switching providers requires no code changes.
+Kuze activates on **whatever LLM key is present** — no provider is hard-required to boot. Six
+providers are supported: **Anthropic** (`@anthropic-ai/sdk`), **OpenAI** (`openai` SDK),
+**Google Gemini** (`@google/generative-ai`), **xAI Grok** and **Kimi/Moonshot** (via shared
+[`@bioloop/llm`](../bioloop-llm/)), and any **OpenAI-compatible** HTTP endpoint
+(Ollama, vLLM, LiteLLM, etc.).
+
+### Auto-detection
+`resolveActiveProvider()` honors an explicit `KUZE_INFERENCE_PROVIDER` when that provider's key
+is present; otherwise it auto-detects by priority: Anthropic → OpenAI → Gemini → xAI → Kimi →
+OpenAI-compatible, based on which of `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / `GEMINI_API_KEY` /
+`XAI_API_KEY` (or `GROK_API_KEY`) / `KIMI_API_KEY` (or `MOONSHOT_API_KEY`) /
+`KUZE_OPENAI_BASE_URL` is set. The active provider is logged at startup.
+
+### No provider configured
+The server still boots (admin and other routes work); chat returns a clear `503 no_llm_provider`
+until a key is set.
+
+### Streaming
+`streamAssistantText()` provides a single provider-agnostic streaming path for the normal chat
+turn; each provider streams natively. Model tiers (`fast`/`balanced`/`powerful`) resolve to the
+active provider's model env vars.
+
+### Tool calling boundary
+The operational tool loop (query_shift/query_stripe/get_aegis_state) is **Anthropic-only** for
+now (`supportsTools()`). On OpenAI/Gemini, Kuze chats normally and the prompt tells him he can't
+pull live data. Cross-provider tool calling is a future extension.
 
 ---
 
@@ -356,9 +384,19 @@ The inference layer is abstracted so Kuze can run against either Anthropic's API
 
 | Variable | Required | Description |
 |---|---|---|
-| `ANTHROPIC_API_KEY` | Yes | Anthropic API key |
-| `ANTHROPIC_MODEL` | No | Model ID (default: claude-sonnet-4-20250514) |
+| `ANTHROPIC_API_KEY` | One provider key required | Anthropic API key (enables tools) |
+| `ANTHROPIC_MODEL` | No | Model ID (default: claude-sonnet-4-6) |
 | `ANTHROPIC_BASE_URL` | No | Override Anthropic API base URL |
+| `OPENAI_API_KEY` | One provider key required | OpenAI API key (native SDK) |
+| `OPENAI_MODEL_FAST/BALANCED/POWERFUL` | No | OpenAI model per tier (defaults gpt-4o-mini/gpt-4o) |
+| `GEMINI_API_KEY` | One provider key required | Google Gemini key (or `GOOGLE_API_KEY`) |
+| `GEMINI_MODEL_FAST/BALANCED/POWERFUL` | No | Gemini model per tier (defaults gemini-2.0-flash) |
+| `XAI_API_KEY` / `GROK_API_KEY` | One provider key required | xAI Grok (via `@bioloop/llm`) |
+| `XAI_MODEL_FAST/BALANCED/POWERFUL` | No | Grok model per tier (default grok-4.5) |
+| `KIMI_API_KEY` / `MOONSHOT_API_KEY` | One provider key required | Kimi Moonshot K2/K3 |
+| `KIMI_MODEL_FAST/BALANCED/POWERFUL` | No | Defaults kimi-k2 / kimi-k3 / kimi-k3 |
+| `KUZE_INFERENCE_PROVIDER` | No | Force a provider; else auto-detected from keys present |
+| `KUZE_OPENAI_BASE_URL` | No | OpenAI-compatible endpoint (Ollama/vLLM/LiteLLM) |
 | `SUPABASE_URL` | Yes | Supabase project URL |
 | `SUPABASE_SERVICE_ROLE_KEY` | Yes | Supabase service role key (server only) |
 | `SESSION_SECRET` | Yes | Secret for admin session cookies |
@@ -406,6 +444,10 @@ The inference layer is abstracted so Kuze can run against either Anthropic's API
 | `ai_peer_interactions` | Inbound and outbound messages exchanged with Ilita and Stele |
 | `tool_call_log` | Every operational tool call — input, output, duration, error (Phase 1) |
 | `constitution` | Versioned foundational charter; the active row is prepended to every system prompt |
+
+**PostgREST exposure (required):** nexus-core must list `kuze` in `authenticator`'s `pgrst.db_schemas` and grant `service_role` on `kuze` tables. Without that, server calls to `.schema('kuze')` fail with `Invalid schema: kuze` (Sentinel, peers, inbox, tasks, tool log, constitution). Access is service-role-only — `anon` / `authenticated` have no USAGE on `kuze`.
+
+**Constitution UI:** Admin → Constitution is intentionally read-only. Amendments are deliberate re-ratifications in SQL (new version row + flip `is_active`), not in-app edits.
 
 ---
 

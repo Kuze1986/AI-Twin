@@ -19,6 +19,7 @@ import { tasksRouter } from './routes/tasks.js'
 import { toolLogRouter } from './routes/toolLog.js'
 import { runTaskQueue } from './tasks/worker.js'
 import { logToolStartup } from './tools/registry.js'
+import { resolveActiveProvider } from './inference/messagesCreate.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -105,6 +106,12 @@ setInterval(() => {
 app.listen(env.PORT, () => {
   console.log(`[ai-twin] server listening on ${env.PORT}`)
   console.log('[startup] DemoForge endpoint: POST /api/chat/demoforge')
+  const activeProvider = resolveActiveProvider()
+  if (activeProvider) {
+    console.log(`[startup] LLM provider: ${activeProvider}`)
+  } else {
+    console.warn('[startup] No LLM provider configured (ANTHROPIC_API_KEY / OPENAI_API_KEY / GEMINI_API_KEY / KUZE_OPENAI_BASE_URL) — chat disabled until one is set')
+  }
   logToolStartup()
 
   if (emailConfigured()) {
