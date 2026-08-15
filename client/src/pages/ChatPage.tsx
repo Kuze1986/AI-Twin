@@ -30,6 +30,7 @@ const MODE_LABEL: Record<ChatMode, string> = {
 }
 
 const ONBOARDED_KEY = 'ai_twin_onboarded_v1'
+const MAX_CHAT_INPUT_CHARS = 350_000
 
 const TOOL_LABELS: Record<string, string> = {
   query_shift: 'Checking The Shift data',
@@ -156,6 +157,10 @@ export function ChatPage() {
 
   const doSend = async (userMsg: string) => {
     if (!token || !userMsg.trim() || streaming) return
+    if (userMsg.length > MAX_CHAT_INPUT_CHARS) {
+      setError(`That document is too large to send at once (${userMsg.length.toLocaleString()} characters). Split it into sections under ${MAX_CHAT_INPUT_CHARS.toLocaleString()} characters.`)
+      return
+    }
     setError(null)
     setLastUserMsg(userMsg)
     setInput('')

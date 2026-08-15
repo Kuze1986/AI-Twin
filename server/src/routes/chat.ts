@@ -39,11 +39,14 @@ const chatLimiter = rateLimit({
 })
 
 const modeEnum = z.enum(['default', 'sales', 'ops', 'outreach', 'debrief'])
+// Kept below typical provider context windows (~90k estimated tokens), while allowing
+// substantial pasted documents without hitting the HTTP parser's 2 MB limit.
+const MAX_CHAT_INPUT_CHARS = 350_000
 
 const bodySchema = z.object({
   session_id: z.string().uuid().optional(),
   mode: modeEnum,
-  user_message: z.string().min(1).max(200_000),
+  user_message: z.string().min(1).max(MAX_CHAT_INPUT_CHARS),
   context_override: z.string().max(100_000).optional(),
 })
 
