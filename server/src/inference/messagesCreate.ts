@@ -9,7 +9,6 @@ import {
   messagesCreate as bioloopMessagesCreate,
   streamText as bioloopStreamText,
 } from './adapters/bioloopFetch.js'
-import { providerConfigured as bioloopProviderConfigured } from '@bioloop/llm'
 
 export type ModelTier = 'fast' | 'balanced' | 'powerful'
 export type Provider = 'anthropic' | 'openai' | 'gemini' | 'xai' | 'kimi' | 'openai_compatible'
@@ -41,9 +40,9 @@ function providerConfigured(p: Provider): boolean {
     case 'gemini':
       return !!(process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY)
     case 'xai':
-      return bioloopProviderConfigured('xai')
+      return !!(process.env.XAI_API_KEY || process.env.GROK_API_KEY)
     case 'kimi':
-      return bioloopProviderConfigured('kimi')
+      return !!(process.env.KIMI_API_KEY || process.env.MOONSHOT_API_KEY)
     case 'openai_compatible':
       return !!process.env.KUZE_OPENAI_BASE_URL
   }
