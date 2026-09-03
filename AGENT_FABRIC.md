@@ -123,6 +123,42 @@ Dispatch endpoints **queue**. A team run is minutes of inference; it outlives an
 and would strand a streaming chat turn. You get a `task_id` immediately and the existing task
 worker does the work.
 
+## From draft to sent
+
+An agent run produces copy; it does not produce email. The seam between them is
+`POST /api/admin/agents/runs/:id/campaign` (or `launch_campaign_from_run` from chat, or the
+button under any completed run in the UI).
+
+That endpoint creates an ordinary `outreach_campaign` task carrying `source_run_id`. The
+existing campaign worker then loads that run's output as **approved source copy** and
+personalizes it per recipient — through the same enforced-draft pipeline everything else
+uses: Sentinel validators, suppression checks, the CAN-SPAM footer, the approval queue.
+
+```
+team run ──▶ approved copy ──▶ /runs/:id/campaign ──▶ kuze.tasks (outreach_campaign)
+                                                            │  payload.source_run_id
+                                                            ▼
+                                              per-lead enforced draft
+                                              ("personalize this, do not add claims")
+                                                            │
+                                                            ▼
+                                           email_messages: pending_approval
+                                                            │
+                                                     Inbox ──▶ you
+```
+
+Two properties worth stating plainly:
+
+- **Nothing sends.** The endpoint produces drafts at `pending_approval`. Cold outreach never
+  auto-sends regardless of any agent's autonomy level.
+- **The per-lead prompt is told not to invent.** It may adjust the opening and the specifics;
+  it may not introduce a claim, statistic, or capability absent from the approved copy. That
+  is the reason to route through a run at all instead of drafting fifty pitches from a goal
+  string.
+
+A `refused` or `failed` run is rejected as a source. Copy Sentinel already blocked does not
+become the seed for fifty more drafts of the same thing.
+
 ## Deploying
 
 1. Apply `supabase/migrations/20260903000000_kuze_agent_fabric.sql`.

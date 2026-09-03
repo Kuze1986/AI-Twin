@@ -88,6 +88,10 @@ export function AdminAgentsPage() {
   // Spawn form
   const [description, setDescription] = useState('')
 
+  // Launch-as-campaign form (belongs to whichever run is expanded)
+  const [campaignTitle, setCampaignTitle] = useState('')
+  const [campaignLeads, setCampaignLeads] = useState('')
+
   // Team form
   const [teamName, setTeamName] = useState('')
   const [teamMission, setTeamMission] = useState('')
@@ -191,10 +195,33 @@ export function AdminAgentsPage() {
     }
     setExpanded(id)
     setDetail(null)
+    setCampaignTitle('')
+    setCampaignLeads('')
     try {
       setDetail((await adminFetch(`/agents/runs/${id}`)) as RunDetail)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not load run')
+    }
+  }
+
+  const launchCampaign = async (runId: string) => {
+    if (!campaignTitle.trim() || !campaignLeads.trim()) return
+    setBusy(runId)
+    setError(null)
+    try {
+      const res = (await adminFetch(`/agents/runs/${runId}/campaign`, {
+        method: 'POST',
+        body: JSON.stringify({ title: campaignTitle, leads_text: campaignLeads }),
+      })) as { task_id: string; lead_count: number }
+      setNotice(
+        `Campaign queued for ${res.lead_count} recipient(s). Drafts land in the Inbox for approval — nothing sends on its own.`,
+      )
+      setCampaignTitle('')
+      setCampaignLeads('')
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Launch failed')
+    } finally {
+      setBusy(null)
     }
   }
 
@@ -445,6 +472,37 @@ export function AdminAgentsPage() {
                       <p className="nx-label">Output</p>
                       <pre className="mt-1 whitespace-pre-wrap font-sans">{detail.run.output ?? '(none)'}</pre>
                     </div>
+
+                    {detail.run.status === 'completed' && detail.run.output && (
+                      <div className="space-y-2 rounded border border-[var(--nx-line)] p-3">
+                        <p className="nx-label">Send this as a campaign</p>
+                        <p className="text-xs text-[var(--nx-text-2)]">
+                          This copy becomes the approved source. Kuze personalizes it per recipient through
+                          the full Sentinel pipeline, and every draft waits in the Inbox — nothing sends here.
+                        </p>
+                        <input
+                          className="nx-input w-full"
+                          placeholder="Campaign title"
+                          value={campaignTitle}
+                          onChange={(e) => setCampaignTitle(e.target.value)}
+                        />
+                        <textarea
+                          className="nx-input w-full font-mono text-xs"
+                          rows={4}
+                          placeholder={'one per line:\nname@company.com, Jane Doe, Acme'}
+                          value={campaignLeads}
+                          onChange={(e) => setCampaignLeads(e.target.value)}
+                        />
+                        <button
+                          type="button"
+                          className="nx-btn"
+                          disabled={busy === r.id || !campaignTitle.trim() || !campaignLeads.trim()}
+                          onClick={() => launchCampaign(r.id)}
+                        >
+                          {busy === r.id ? 'Queueing…' : 'Draft campaign for approval'}
+                        </button>
+                      </div>
+                    )}
                   </>
                 )}
               </div>

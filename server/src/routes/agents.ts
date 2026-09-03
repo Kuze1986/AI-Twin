@@ -8,7 +8,7 @@ import { Router } from 'express'
 import { z } from 'zod'
 import { requireAdmin } from '../adminMiddleware.js'
 import { supabaseAdmin } from '../supabaseAdmin.js'
-import { createTask } from '../tasks/create.js'
+import { createTask, parseLeadsText, type Lead } from '../tasks/create.js'
 import { listDelegableTools } from '../tools/registry.js'
 import {
   applyGovernanceVerdict,
@@ -353,6 +353,87 @@ agentsRouter.get('/runs/:id', async (req, res) => {
         .order('started_at'),
     ])
     res.json({ run, messages: messages ?? [], audits: audits ?? [], member_runs: children ?? [] })
+  } catch (e) {
+    serverError(res, e)
+  }
+})
+
+// ── RUN → CAMPAIGN ────────────────────────────────────────────────────────────
+
+const campaignSchema = z.object({
+  title: z.string().min(1).max(200),
+  goal: z.string().min(1).max(10_000).optional(),
+  type: z.enum(['outreach_campaign', 'follow_up']).default('outreach_campaign'),
+  leads: z
+    .array(z.object({ email: z.string().email(), name: z.string().optional(), company: z.string().optional() }))
+    .optional(),
+  leads_text: z.string().max(100_000).optional(),
+})
+
+/**
+ * POST /runs/:id/campaign — turn a completed agent run into a real outreach campaign.
+ *
+ * This is the seam between the fabric and the send path. The run's output becomes approved
+ * source copy; the existing campaign worker then personalizes it per lead through the full
+ * enforced-draft pipeline — Sentinel validators, suppression checks, the approval queue.
+ * Nothing here sends: it produces drafts that still need a human in the Inbox.
+ *
+ * A refused or failed run is rejected outright. Copy that Sentinel already blocked is not
+ * source material for fifty more drafts of the same thing.
+ */
+agentsRouter.post('/runs/:id/campaign', async (req, res) => {
+  const parsed = campaignSchema.safeParse(req.body)
+  if (!parsed.success) {
+    res.status(400).json({ error: { code: 'validation', message: parsed.error.message } })
+    return
+  }
+
+  try {
+    const { data: run } = await db()
+      .from('agent_runs')
+      .select('id, status, output, objective')
+      .eq('id', req.params.id)
+      .maybeSingle()
+
+    if (!run) {
+      res.status(404).json({ error: { code: 'not_found', message: 'No such run' } })
+      return
+    }
+    if (run.status !== 'completed') {
+      res.status(409).json({
+        error: {
+          code: 'run_not_usable',
+          message: `This run is ${run.status}. Only a completed run can seed a campaign.`,
+        },
+      })
+      return
+    }
+    if (!run.output?.trim()) {
+      res.status(409).json({ error: { code: 'no_output', message: 'This run produced no copy to send.' } })
+      return
+    }
+
+    const leads: Lead[] = [
+      ...(parsed.data.leads ?? []),
+      ...(parsed.data.leads_text ? parseLeadsText(parsed.data.leads_text) : []),
+    ]
+    if (leads.length === 0) {
+      res.status(400).json({
+        error: { code: 'no_leads', message: 'Add at least one valid recipient email.' },
+      })
+      return
+    }
+
+    const task = await createTask({
+      title: parsed.data.title,
+      type: parsed.data.type,
+      goal: parsed.data.goal?.trim() || run.objective,
+      leads,
+      source: 'admin',
+      payload: { source_run_id: run.id },
+    })
+
+    res.json({ task_id: task.id, lead_count: leads.length })
   } catch (e) {
     serverError(res, e)
   }

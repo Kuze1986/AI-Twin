@@ -8,10 +8,11 @@
 // blocking a streaming chat turn on it would strand Brandon watching a spinner. They return
 // a task id, and the existing task worker drains it.
 
-import { createTask } from '../tasks/create.js'
+import { createTask, parseLeadsText, type Lead } from '../tasks/create.js'
 import { getAgent, getTeam, listAgents, listTeams } from '../agents/registry.js'
 import { spawnAgent } from '../agents/spawn.js'
 import { createTeam } from '../agents/registry.js'
+import { supabaseAdmin } from '../supabaseAdmin.js'
 import { fail, ok, type KuzeTool, type ToolContext, type ToolResult } from './types.js'
 
 const SOURCE = 'agent_fabric'
@@ -249,4 +250,89 @@ const assignWorkTool: KuzeTool = {
   },
 }
 
-export const agentTools: KuzeTool[] = [createAgentTool, listAgentsTool, createTeamTool, assignWorkTool]
+const launchCampaignTool: KuzeTool = {
+  name: 'launch_campaign_from_run',
+  delegable: false,
+  modes: INTERNAL_MODES,
+  description: [
+    'Turn a completed agent run into a real outreach campaign. The run output becomes approved',
+    'source copy, and the campaign worker personalizes it per recipient through the full',
+    'enforced-draft pipeline. This DRAFTS ONLY — every email lands in the approval Inbox and',
+    'nothing sends without Brandon. Use it after he approves copy an agent or team produced.',
+  ].join(' '),
+  inputSchema: {
+    type: 'object',
+    properties: {
+      run_id: { type: 'string', description: 'The completed agent or team run whose copy to send.' },
+      title: { type: 'string', description: 'Short label for the campaign.' },
+      leads_text: {
+        type: 'string',
+        description: 'Recipients, one per line: "email, name, company" (name and company optional).',
+      },
+      type: { type: 'string', enum: ['outreach_campaign', 'follow_up'], description: 'Defaults to outreach_campaign.' },
+    },
+    required: ['run_id', 'title', 'leads_text'],
+  },
+  async execute(input: unknown, _ctx: ToolContext): Promise<ToolResult> {
+    const startedAt = Date.now()
+    const { run_id, title, leads_text, type } = (input ?? {}) as {
+      run_id?: string
+      title?: string
+      leads_text?: string
+      type?: string
+    }
+    if (!run_id || !title?.trim() || !leads_text?.trim()) {
+      return fail('launch_campaign_from_run requires run_id, title, and leads_text', SOURCE, startedAt)
+    }
+
+    try {
+      const { data: run } = await supabaseAdmin
+        .schema('kuze')
+        .from('agent_runs')
+        .select('id, status, output, objective')
+        .eq('id', run_id)
+        .maybeSingle()
+
+      if (!run) return fail(`no agent run with id "${run_id}"`, SOURCE, startedAt)
+      if (run.status !== 'completed') {
+        return fail(`run ${run_id} is ${run.status} — only a completed run can seed a campaign`, SOURCE, startedAt)
+      }
+      if (!run.output?.trim()) return fail(`run ${run_id} produced no copy to send`, SOURCE, startedAt)
+
+      const leads: Lead[] = parseLeadsText(leads_text)
+      if (leads.length === 0) {
+        return fail('no valid recipient emails found in leads_text', SOURCE, startedAt)
+      }
+
+      const task = await createTask({
+        title: title.trim(),
+        type: type === 'follow_up' ? 'follow_up' : 'outreach_campaign',
+        goal: run.objective,
+        leads,
+        source: 'chat',
+        payload: { source_run_id: run.id },
+      })
+
+      return ok(
+        {
+          task_id: task.id,
+          lead_count: leads.length,
+          source_run_id: run.id,
+          note: 'Drafts only — every email waits in the approval Inbox.',
+        },
+        SOURCE,
+        startedAt,
+      )
+    } catch (e) {
+      return fail(`launch_campaign_from_run failed: ${(e as Error).message}`, SOURCE, startedAt)
+    }
+  },
+}
+
+export const agentTools: KuzeTool[] = [
+  createAgentTool,
+  listAgentsTool,
+  createTeamTool,
+  assignWorkTool,
+  launchCampaignTool,
+]

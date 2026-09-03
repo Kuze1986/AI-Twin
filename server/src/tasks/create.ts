@@ -1,5 +1,7 @@
 import { supabaseAdmin } from '../supabaseAdmin.js'
 
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
 export interface Lead {
   email: string
   name?: string
@@ -54,4 +56,21 @@ export async function createTask(input: CreateTaskInput): Promise<TaskRow> {
 
   if (error || !data) throw new Error(error?.message ?? 'task insert failed')
   return data as TaskRow
+}
+
+/**
+ * Parse a pasted lead list — one per line, "email, name, company" (name/company optional).
+ * Shared by the Tasks route and the Agents route so a campaign launched from an agent run
+ * accepts exactly the same paste format as one created by hand.
+ */
+export function parseLeadsText(text: string): Lead[] {
+  const out: Lead[] = []
+  for (const raw of text.split(/\r?\n/)) {
+    const line = raw.trim()
+    if (!line) continue
+    const [email, name, company] = line.split(',').map((s) => s.trim())
+    if (!email || !EMAIL_RE.test(email)) continue
+    out.push({ email: email.toLowerCase(), name: name || undefined, company: company || undefined })
+  }
+  return out
 }

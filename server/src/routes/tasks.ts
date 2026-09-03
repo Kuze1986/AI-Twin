@@ -2,26 +2,11 @@ import { Router } from 'express'
 import { z } from 'zod'
 import { requireAdmin } from '../adminMiddleware.js'
 import { supabaseAdmin } from '../supabaseAdmin.js'
-import { createTask, type Lead } from '../tasks/create.js'
+import { createTask, parseLeadsText, type Lead } from '../tasks/create.js'
 
 export const tasksRouter = Router()
 
 tasksRouter.use(requireAdmin)
-
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-
-/** Parse a pasted lead list — one per line, "email, name, company" (name/company optional). */
-function parseLeadsText(text: string): Lead[] {
-  const out: Lead[] = []
-  for (const raw of text.split(/\r?\n/)) {
-    const line = raw.trim()
-    if (!line) continue
-    const [email, name, company] = line.split(',').map((s) => s.trim())
-    if (!email || !EMAIL_RE.test(email)) continue
-    out.push({ email: email.toLowerCase(), name: name || undefined, company: company || undefined })
-  }
-  return out
-}
 
 const leadSchema = z.object({
   email: z.string().email(),

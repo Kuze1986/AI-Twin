@@ -21,7 +21,7 @@ interface TaskRow {
   type: 'outreach_campaign' | 'follow_up' | 'custom' | 'agent_run' | 'team_run'
   goal: string
   status: string
-  payload: { leads?: Lead[]; target_key?: string; [k: string]: unknown }
+  payload: { leads?: Lead[]; target_key?: string; source_run_id?: string; [k: string]: unknown }
 }
 
 let running = false
@@ -194,6 +194,11 @@ async function runCampaign(task: TaskRow): Promise<void> {
   const ltm = await getTopLongTermMemory(10)
   const mode: ChatMode = 'outreach'
 
+  // A campaign launched from an agent run carries that run's output as approved copy. Each
+  // per-lead draft then personalizes reviewed material instead of inventing a fresh pitch —
+  // which is the whole point of having had a strategist and a drafter look at it first.
+  const approvedCopy = await loadApprovedCopy(task)
+
   let drafted = 0
   let failed = 0
 
@@ -226,6 +231,17 @@ async function runCampaign(task: TaskRow): Promise<void> {
       'Subject: <a specific, non-spammy subject line>',
       '',
       '<the email body — your voice, concise, one clear ask. No placeholder brackets, no "Dear [Name]". Sign off as yourself.>',
+      ...(approvedCopy
+        ? [
+            '',
+            '## APPROVED_COPY (already reviewed — this is your source material)',
+            'The angle, claims, and proof below were produced by your agents and approved. Personalize',
+            'the copy for this recipient: adjust the opening and the specifics, keep the angle and the',
+            'ask. Do NOT introduce a claim, statistic, or capability that does not appear below.',
+            '',
+            approvedCopy,
+          ]
+        : []),
     ].join('\n')
 
     const systemPrompt = await buildSystemPrompt({ identity, mode, modeConfig, longTermTop: ltm, contextOverride })
@@ -293,6 +309,34 @@ async function runCampaign(task: TaskRow): Promise<void> {
     error: null,
   })
   console.log(`[tasks] campaign ${task.id}: ${drafted} drafted, ${failed} failed → ${finalStatus}`)
+}
+
+/**
+ * Fetch the agent-run output a campaign was seeded from, if any. A missing or empty run is
+ * not fatal — the campaign falls back to drafting from the goal alone, which is exactly what
+ * a hand-created campaign does. It is logged, because silently losing approved copy would
+ * look identical to the copy simply being ignored.
+ */
+async function loadApprovedCopy(task: TaskRow): Promise<string | null> {
+  const runId = task.payload.source_run_id
+  if (typeof runId !== 'string' || !runId) return null
+
+  const { data, error } = await supabaseAdmin
+    .schema('kuze')
+    .from('agent_runs')
+    .select('output, status')
+    .eq('id', runId)
+    .maybeSingle()
+
+  if (error || !data) {
+    console.warn(`[tasks] campaign ${task.id}: source run ${runId} not found — drafting from the goal alone`)
+    return null
+  }
+  if (!data.output?.trim()) {
+    console.warn(`[tasks] campaign ${task.id}: source run ${runId} has no output — drafting from the goal alone`)
+    return null
+  }
+  return data.output.trim()
 }
 
 /** Custom one-off: Kuze produces a text answer for the goal, enforced, stored in result. */
