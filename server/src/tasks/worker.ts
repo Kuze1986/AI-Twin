@@ -5,6 +5,9 @@ import { supabaseAdmin } from '../supabaseAdmin.js'
 import type { ChatMode } from '../types.js'
 import type { ValidatorContext } from '../validators/index.js'
 import { generateEnforcedDraft } from '../email/enforce.js'
+import { getAgent, getTeam } from '../agents/registry.js'
+import { runAgent } from '../agents/runner.js'
+import { runTeam } from '../agents/orchestrator.js'
 
 interface Lead {
   email: string
@@ -15,10 +18,10 @@ interface Lead {
 interface TaskRow {
   id: string
   title: string
-  type: 'outreach_campaign' | 'follow_up' | 'custom'
+  type: 'outreach_campaign' | 'follow_up' | 'custom' | 'agent_run' | 'team_run'
   goal: string
   status: string
-  payload: { leads?: Lead[]; [k: string]: unknown }
+  payload: { leads?: Lead[]; target_key?: string; [k: string]: unknown }
 }
 
 let running = false
@@ -97,8 +100,56 @@ export async function runTaskQueue(): Promise<{ ran: boolean; processed: number 
 }
 
 async function runTask(task: TaskRow): Promise<void> {
+  if (task.type === 'agent_run' || task.type === 'team_run') return runFabricTask(task)
   if (task.type === 'custom') return runCustom(task)
   return runCampaign(task)
+}
+
+/**
+ * Agent Fabric dispatch. The queue is what makes agent and team runs safe to trigger from a
+ * chat turn: the turn returns a task id in milliseconds and the minutes of inference happen
+ * here, where a failure lands on the task row instead of killing a stream.
+ */
+async function runFabricTask(task: TaskRow): Promise<void> {
+  const targetKey = String(task.payload.target_key ?? '')
+  if (!targetKey) {
+    await setTask(task.id, { status: 'failed', error: 'task payload is missing target_key' })
+    return
+  }
+
+  if (task.type === 'agent_run') {
+    const agent = await getAgent(targetKey)
+    if (!agent) {
+      await setTask(task.id, { status: 'failed', error: `no agent with key "${targetKey}"` })
+      return
+    }
+    const result = await runAgent({ agent, objective: task.goal, trigger: 'task', taskId: task.id })
+    await setTask(task.id, {
+      status: result.refused ? 'failed' : 'completed',
+      result: { run_id: result.run.id, agent_key: agent.agent_key, output: result.output },
+      error: result.refused ? (result.refusalReason ?? 'Sentinel refused the output') : null,
+    })
+    console.log(`[tasks] agent run ${task.id} (${agent.agent_key}) → ${result.run.status}`)
+    return
+  }
+
+  const team = await getTeam(targetKey)
+  if (!team) {
+    await setTask(task.id, { status: 'failed', error: `no team with key "${targetKey}"` })
+    return
+  }
+  const result = await runTeam({ team, objective: task.goal, trigger: 'task', taskId: task.id })
+  await setTask(task.id, {
+    status: 'completed',
+    result: {
+      run_id: result.run.id,
+      team_key: team.team_key,
+      brief: result.brief,
+      members: result.memberRuns.map((m) => ({ agent_key: m.agent_key, status: m.status })),
+    },
+    error: null,
+  })
+  console.log(`[tasks] team run ${task.id} (${team.team_key}) → ${result.memberRuns.length} seat(s)`)
 }
 
 /** Outreach campaigns and follow-ups: draft one enforced email per lead into the approval queue. */

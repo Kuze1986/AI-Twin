@@ -2,6 +2,16 @@
 
 Full-stack application that mirrors a **specific person’s** voice, values, decision logic, and domain knowledge — not a generic chatbot. Stack: **React + Vite + Tailwind**, **Express (TypeScript)**, **Anthropic Claude**, **Supabase (Postgres + Auth)**, deployable to **Railway**.
 
+## Agent Fabric
+
+Kuze can build his own workforce: describe a seat in plain language and he writes the charter,
+Ilita reviews it before it can act, and it runs under scoped tools with its output audited.
+Teams are rosters of those seats that run a goal end to end.
+
+See **[AGENT_FABRIC.md](AGENT_FABRIC.md)** for the architecture, invariants, and API. Requires
+migration `supabase/migrations/20260903000000_kuze_agent_fabric.sql` plus Ilita's
+`src/ddl/ilita_agent_governance.sql`, and `ILITA_API_URL` / `ILITA_API_KEY` for the gate.
+
 ## Prerequisites
 
 - Node.js 20+

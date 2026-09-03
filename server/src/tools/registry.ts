@@ -8,15 +8,43 @@ import { getProviderName } from '../inference/messagesCreate.js'
 import { getAegisState } from './getAegisState.js'
 import { queryShift } from './queryShift.js'
 import { queryStripe } from './queryStripe.js'
+import { agentTools } from './agentTools.js'
 import type { KuzeTool, ToolContext, ToolResult } from './types.js'
 
-const TOOLS: KuzeTool[] = [queryShift, queryStripe, getAegisState]
+const TOOLS: KuzeTool[] = [queryShift, queryStripe, getAegisState, ...agentTools]
 
 const OUTPUT_MAX_BYTES = 16 * 1024
 
 /** Tools available for a given chat mode (undefined `modes` = all modes). */
 export function getToolsForMode(mode: string): KuzeTool[] {
   return TOOLS.filter((t) => !t.modes || t.modes.includes(mode))
+}
+
+/**
+ * Resolve an agent's tool allowlist against the live registry.
+ *
+ * Only delegable tools can be granted to a sub-agent, so a charter naming `create_agent`
+ * gets it dropped rather than honored. Unknown names come back in `unknown` for the caller
+ * to record — an allowlist entry that resolves to nothing is a charter bug worth surfacing,
+ * not a silent no-op.
+ */
+export function resolveAllowlist(names: string[]): { tools: KuzeTool[]; unknown: string[] } {
+  const tools: KuzeTool[] = []
+  const unknown: string[] = []
+  for (const name of names) {
+    const tool = TOOLS.find((t) => t.name === name && t.delegable !== false)
+    if (tool) tools.push(tool)
+    else unknown.push(name)
+  }
+  return { tools, unknown }
+}
+
+/** Name + description of every tool an agent charter is allowed to request. */
+export function listDelegableTools(): Array<{ name: string; description: string }> {
+  return TOOLS.filter((t) => t.delegable !== false).map((t) => ({
+    name: t.name,
+    description: t.description,
+  }))
 }
 
 /** Anthropic tool definitions for the tools passed in. */

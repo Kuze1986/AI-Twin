@@ -10,6 +10,7 @@ const links = [
   { to: '/admin/sessions', label: 'Sessions' },
   { to: '/admin/modes', label: 'Modes' },
   { to: '/admin/peers', label: 'AI Peers' },
+  { to: '/admin/agents', label: 'Agents' },
   { to: '/admin/tasks', label: 'Tasks' },
   { to: '/admin/inbox', label: 'Inbox' },
   { to: '/admin/tool-log', label: 'Tool Log' },

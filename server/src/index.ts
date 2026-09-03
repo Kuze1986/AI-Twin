@@ -8,6 +8,7 @@ import { sweepStaleSessions } from './consolidation.js'
 import { emailConfigured, env } from './env.js'
 import { pollInbox } from './email/poller.js'
 import { adminRouter } from './routes/admin.js'
+import { agentsRouter } from './routes/agents.js'
 import { chatRouter } from './routes/chat.js'
 import { constitutionRouter } from './routes/constitution.js'
 import { emailRouter } from './routes/email.js'
@@ -73,6 +74,7 @@ app.use('/api/admin', adminRouter)
 app.use('/api/admin/constitution', constitutionRouter)
 app.use('/api/admin/email', emailRouter)
 app.use('/api/admin/tasks', tasksRouter)
+app.use('/api/admin/agents', agentsRouter)
 app.use('/api/admin/tool-log', toolLogRouter)
 app.use('/api/sentinel', sentinelRouter)
 
@@ -113,6 +115,7 @@ app.listen(env.PORT, () => {
     console.warn('[startup] No LLM provider configured (ANTHROPIC_API_KEY / OPENAI_API_KEY / GEMINI_API_KEY / KUZE_OPENAI_BASE_URL) — chat disabled until one is set')
   }
   logToolStartup()
+  console.log('[startup] Agent Fabric: POST /api/admin/agents (spawn) · /api/admin/agents/teams (assemble)')
 
   if (emailConfigured()) {
     console.log(`[startup] Email channel ENABLED for ${env.KUZE_EMAIL_ADDRESS} — polling every ${env.EMAIL_POLL_INTERVAL_MS}ms`)

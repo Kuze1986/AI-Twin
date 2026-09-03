@@ -6,13 +6,17 @@ export interface Lead {
   company?: string
 }
 
+export type TaskType = 'outreach_campaign' | 'follow_up' | 'custom' | 'agent_run' | 'team_run'
+
 export interface CreateTaskInput {
   title: string
-  type: 'outreach_campaign' | 'follow_up' | 'custom'
+  type: TaskType
   goal: string
   leads?: Lead[]
   source: 'admin' | 'chat'
   scheduledFor?: string | null
+  /** Extra payload keys, merged alongside `leads`. Agent/team runs carry `target_key` here. */
+  payload?: Record<string, unknown>
 }
 
 export interface TaskRow {
@@ -42,7 +46,7 @@ export async function createTask(input: CreateTaskInput): Promise<TaskRow> {
       goal: input.goal,
       source: input.source,
       status: 'queued',
-      payload: { leads },
+      payload: { ...(input.payload ?? {}), leads },
       scheduled_for: input.scheduledFor ?? null,
     })
     .select('*')

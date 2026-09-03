@@ -25,6 +25,10 @@ export interface KuzeTool {
   inputSchema: JSONSchema
   modes?: string[] // restrict to these modes; undefined = all modes
   productTags?: string[] // Phase 5; unused in Phase 1 but carried on the interface
+  // False for tools that manage the Agent Fabric itself (create_agent, run_team, ...).
+  // Sub-agents never receive these, so a spawned agent cannot spawn or re-scope agents —
+  // authority to build the workforce stays with Kuze and Brandon. Undefined = delegable.
+  delegable?: boolean
   execute(input: unknown, ctx: ToolContext): Promise<ToolResult>
 }
 

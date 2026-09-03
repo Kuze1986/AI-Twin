@@ -4,6 +4,7 @@ import { ErrorBoundary } from './components/ErrorBoundary'
 import { ToastProvider } from './components/Toast'
 import { ChatPage } from './pages/ChatPage'
 import { LoginPage } from './pages/LoginPage'
+import { AdminAgentsPage } from './pages/admin/AdminAgentsPage'
 import { AdminCalibrationPage } from './pages/admin/AdminCalibrationPage'
 import { AdminConstitutionPage } from './pages/admin/AdminConstitutionPage'
 import { AdminIdentityPage } from './pages/admin/AdminIdentityPage'
@@ -38,6 +39,7 @@ export default function App() {
                   <Route path="sessions" element={<AdminSessionsPage />} />
                   <Route path="modes" element={<AdminModesPage />} />
                   <Route path="peers" element={<AdminPeersPage />} />
+                  <Route path="agents" element={<AdminAgentsPage />} />
                   <Route path="tasks" element={<AdminTasksPage />} />
                   <Route path="inbox" element={<AdminInboxPage />} />
                   <Route path="tool-log" element={<AdminToolLogPage />} />
